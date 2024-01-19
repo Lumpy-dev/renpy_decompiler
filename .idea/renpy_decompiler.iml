@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/pickle_decompiler/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/pickle_decompiler/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/pickle_decompiler/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_backend/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_backend/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_backend/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/just_audio_mpv/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/just_audio_mpv/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/just_audio_mpv/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/just_audio_mpv/examples/multiplayer/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/just_audio_mpv/examples/multiplayer/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/just_audio_mpv/examples/multiplayer/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral/.plugin_symlinks/url_launcher_linux/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/just_audio_windows/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/just_audio_windows/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/just_audio_windows/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/path_provider_windows/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/shared_preferences_windows/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows/example/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows/example/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral/.plugin_symlinks/url_launcher_windows/example/build" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/android/.gradle" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/linux/flutter/ephemeral" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/test/rpa" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/windows/flutter/ephemeral" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_backend/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/pickle_decompiler/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_backend/out_rpa" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_backend/out_rpyc" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/.idea/inspectionProfiles" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/.idea/libraries" />
+      <excludeFolder url="file://$MODULE_DIR$/renpy_decompiler_gui/.idea/runConfigurations" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="library" name="Dart SDK" level="project" />
+    <orderEntry type="library" name="Dart Packages" level="project" />
+  </component>
+</module>

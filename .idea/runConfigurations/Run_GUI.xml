@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run GUI" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/renpy_decompiler_gui/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
