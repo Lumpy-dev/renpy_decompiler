@@ -20,7 +20,6 @@ jobs:
     - uses: subosito/flutter-action@v2.12.0
       with:
         channel: 'stable'
-    - run: dart analyze --fatal-infos
     
     - run: flutter pub get
       working-directory: "renpy_decompiler_gui/"
@@ -39,3 +38,5 @@ jobs:
       working-directory: "pickle_decompiler/"
     - run: dart analyze --fatal-infos
       working-directory: "pickle_decompiler/"
+    
+    - run: dart analyze --fatal-infos
