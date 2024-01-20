@@ -6,27 +6,72 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:pickle_decompiler/pickle_decompiler.dart';
 import 'package:renpy_decompiler_backend/versions/alt.dart';
+import 'package:renpy_decompiler_backend/versions/enc.dart';
+import 'package:renpy_decompiler_backend/versions/hitomi.dart';
 import 'package:renpy_decompiler_backend/versions/official_rpa.dart';
+import 'package:renpy_decompiler_backend/versions/plz.dart';
+import 'package:renpy_decompiler_backend/versions/tmoz.dart';
 import 'package:renpy_decompiler_backend/versions/unofficial_rpa.dart';
 import 'package:renpy_decompiler_backend/versions/zix.dart';
 
 abstract class RPAVersion {
-  (int offset, int? key) findOffsetAndKey(String header, File file);
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file);
   String get version;
+  List<int> get rawVersion => version.codeUnits;
   void postProcess(RPATreeNodeFile source, Sink<List<int>> sink) {
     sink.add(source.read(-1));
   }
 
   static List<RPAVersion> versions = [
+    // "official" ones directly from UnRPA
     RPAVersionOne(),
     RPAVersionTwo(),
     RPAVersionThree(),
     RPAVersionThreePointTwo(),
     RPAVersionFour(),
+    RPAAsenheim(),
     ZiX12A(),
     ZiX12B(),
     ALT1(),
+
+    // All the other ones from forks of UnRPA
+    ENC1(),
+    RPAVersionNinePointTwo(),
+    PLZVersion2(),
+    PLZVersion3(),
+    TMOZVersionZeroTwo(),
   ];
+
+  ComplexIndexEntry normaliseEntry(IndexEntry entry) {
+    return [
+      for (var part in entry)
+        if (part.length == 2)
+          [part[0], part[1], []]
+        else
+          [part[0], part[1], part[2]]
+    ];
+  }
+
+  Map<String, ComplexIndexEntry> deobfuscateIndex(
+      Map<String, IndexEntry> index, int key) {
+    return {
+      for (var entry in index.entries)
+        entry.key: deobfuscateEntry(entry.value, key)
+    };
+  }
+
+  ComplexIndexEntry deobfuscateEntry(IndexEntry entry, int key) {
+    return [
+      for (var range in normaliseEntry(entry))
+        [range[0] ^ key, range[1] ^ key, range[2]]
+    ];
+  }
+
+  Map<String, IndexEntry> normaliseIndex(Map<String, ComplexIndexEntry> index) {
+    return {
+      for (var entry in index.entries) entry.key: normaliseEntry(entry.value)
+    };
+  }
 }
 
 abstract class RPATreeNode {
@@ -143,9 +188,31 @@ class UnsupportedRPAVersionException implements Exception {
   UnsupportedRPAVersionException(this.message);
 }
 
-bool isRPAFile(File file) {
-  return file.statSync().size >= 3 &&
-      ListEquality().equals(file.openSync().readSync(3), utf8.encode('RPA'));
+Future<bool> isRPAFile(File file) async {
+  List<int> headerLine = [];
+  bool finished = false;
+  await for (var byteList in file.openRead()) {
+    for (var byte in byteList) {
+      if (byte == utf8.encode('\n').first) {
+        finished = true;
+        break;
+      }
+      headerLine.add(byte);
+    }
+    if (finished) {
+      break;
+    }
+  }
+
+  String header = utf8.decode(headerLine, allowMalformed: true);
+
+  for(RPAVersion version in RPAVersion.versions) {
+    if(header.startsWith(version.version)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 Future<
@@ -177,7 +244,7 @@ Future<
   RPAVersion? currentVersion;
 
   for (var v in RPAVersion.versions) {
-    if (v.version == version) {
+    if (ListEquality().equals(v.rawVersion, headerLine.sublist(0, v.rawVersion.length))) {
       currentVersion = v;
       break;
     }
@@ -190,10 +257,10 @@ Future<
 
   if ([ZiX12A(), ZiX12B()].contains(currentVersion)) {
     throw UnsupportedRPAVersionException(
-        'Zix archives (${currentVersion.version} in your case) are not supported yet as they use heavy obfuscation which is harder to reverse engineer.');
+        'Zix archives (${currentVersion.version} in your case) are not supported yet as they use heavy obfuscation which is harder to port/reverse engineer.');
   }
 
-  var (offset, key) = currentVersion.findOffsetAndKey(header, file);
+  var (offset, key) = currentVersion.findOffsetAndKey(header, headerLine, file);
 
   List<int> compressedIndex = [];
   await for (var byteList in File(file.path).openRead(offset)) {
@@ -226,9 +293,9 @@ Future<({RPATreeNode tree, RPAVersion version, int fileAmount})> createTree(
   }
 
   if (decompressedIndex.key != null) {
-    normalIndex = deobfuscateIndex(normalIndex, decompressedIndex.key!);
+    normalIndex = decompressedIndex.version.deobfuscateIndex(normalIndex, decompressedIndex.key!);
   } else {
-    normalIndex = normaliseIndex(normalIndex);
+    normalIndex = decompressedIndex.version.normaliseIndex(normalIndex);
   }
 
   var archive = file.openSync();
@@ -268,35 +335,4 @@ Future<({RPATreeNode tree, RPAVersion version, int fileAmount})> createTree(
     version: decompressedIndex.version,
     fileAmount: index.length
   );
-}
-
-ComplexIndexEntry normaliseEntry(IndexEntry entry) {
-  return [
-    for (var part in entry)
-      if (part.length == 2)
-        [part[0], part[1], []]
-      else
-        [part[0], part[1], part[2]]
-  ];
-}
-
-Map<String, ComplexIndexEntry> deobfuscateIndex(
-    Map<String, IndexEntry> index, int key) {
-  return {
-    for (var entry in index.entries)
-      entry.key: deobfuscateEntry(entry.value, key)
-  };
-}
-
-ComplexIndexEntry deobfuscateEntry(IndexEntry entry, int key) {
-  return [
-    for (var range in normaliseEntry(entry))
-      [range[0] ^ key, range[1] ^ key, range[2]]
-  ];
-}
-
-Map<String, IndexEntry> normaliseIndex(Map<String, ComplexIndexEntry> index) {
-  return {
-    for (var entry in index.entries) entry.key: normaliseEntry(entry.value)
-  };
 }

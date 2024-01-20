@@ -4,7 +4,7 @@ import 'package:renpy_decompiler_backend/tree_creator.dart';
 
 class ALT1 extends RPAVersion {
   @override
-  (int offset, int? key) findOffsetAndKey(String header, File file) {
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file) {
     List<String> parts = header.split(' ');
     return (
       int.parse(parts[2], radix: 16),

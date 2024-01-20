@@ -16,7 +16,7 @@ int obfuscationOffset(List<int> value) {
 
 class ZiX12A extends RPAVersion {
   @override
-  (int offset, int? key) findOffsetAndKey(String header, File file) {
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file) {
     return (obfuscationOffset(utf8.encode(header.split(' ').last)), null);
   }
 
@@ -26,7 +26,7 @@ class ZiX12A extends RPAVersion {
 
 class ZiX12B extends RPAVersion {
   @override
-  (int offset, int? key) findOffsetAndKey(String header, File file) {
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file) {
     return (obfuscationOffset(utf8.encode(header.split(' ').last)), null);
   }
 
