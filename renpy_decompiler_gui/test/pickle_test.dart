@@ -50,6 +50,12 @@ void main() {
   // Here the performance is comparable, but Dart is still slower because of its flush, if all was kept in memory the results would be the same.
   group('Dart pickle load against Python pickle load', () {
     Directory rpaDir = Directory('tests/rpa');
+
+    if(!rpaDir.existsSync()) {
+      print('RPA directory not found, skipping tests');
+      return;
+    }
+
     for (var file in rpaDir.listSync()) {
       test('test ${basename(file.path)}\'s load', () async {
         if (file is File) {
