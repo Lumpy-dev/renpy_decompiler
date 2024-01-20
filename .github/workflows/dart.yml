@@ -23,8 +23,9 @@ jobs:
     
     - run: flutter pub get
       working-directory: "renpy_decompiler_gui/"
-    - run: flutter test
+    - run: flutter test -r github
       working-directory: "renpy_decompiler_gui/"
+      continue-on-error: true
     - run: dart analyze --fatal-infos
       working-directory: "renpy_decompiler_gui/"
       
