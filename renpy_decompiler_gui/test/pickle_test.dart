@@ -11,6 +11,12 @@ void main() {
   // Performance between Python and Dart here is not comparable, most of the compute time in Dart is flushing all the data to stdout or a file.
   group('Dart pickle dis against Python pickle dis', () {
     Directory rpaDir = Directory('tests/rpa');
+
+    if(!rpaDir.existsSync()) {
+      print('RPA directory not found, skipping tests');
+      return;
+    }
+
     for (var file in rpaDir.listSync()) {
       test('test ${basename(file.path)}\'s dis', () async {
         if (file is File) {
