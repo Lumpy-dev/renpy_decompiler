@@ -21,7 +21,21 @@ jobs:
       with:
         channel: 'stable'
     - run: dart analyze --fatal-infos
+    
     - run: flutter pub get
       working-directory: "renpy_decompiler_gui/"
     - run: flutter test
       working-directory: "renpy_decompiler_gui/"
+    - run: dart analyze --fatal-infos
+      working-directory: "renpy_decompiler_gui/"
+      
+    
+    - run: dart pub get
+      working-directory: "renpy_decompiler_backend/"
+    - run: dart analyze --fatal-infos
+      working-directory: "renpy_decompiler_backend/"
+
+    - run: dart pub get
+      working-directory: "pickle_decompiler/"
+    - run: dart analyze --fatal-infos
+      working-directory: "pickle_decompiler/"
