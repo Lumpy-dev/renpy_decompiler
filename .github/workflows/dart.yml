@@ -1,0 +1,27 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: Dart
+
+on:
+  push:
+    branches: [ "stable", "master" ]
+  pull_request:
+    branches: [ "stable", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: subosito/flutter-action@v2.12.0
+      with:
+        channel: 'stable'
+    - run: dart analyze --fatal-infos
+    - run: flutter pub get
+      working-directory: "renpy_decompiler_gui/"
+    - run: flutter test
+      working-directory: "renpy_decompiler_gui/"
