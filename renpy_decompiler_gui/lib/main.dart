@@ -24,17 +24,6 @@ Future<void> loadFlutter() async {
   isMPVInstalled =
       Platform.isLinux ? Process.runSync('which', ['mpv']).exitCode == 0 : null;
 
-  LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(['CPython'],
-        await rootBundle.loadString('assets/CPython_LICENSE', cache: false));
-    yield LicenseEntryWithLineBreaks(['unrpyc'],
-        await rootBundle.loadString('assets/unrpyc_LICENSE', cache: false));
-    yield LicenseEntryWithLineBreaks(['renpy'],
-        await rootBundle.loadString('assets/renpy_LICENSE', cache: false));
-    yield LicenseEntryWithLineBreaks(['unrpa'],
-        await rootBundle.loadString('assets/unrpa_COPYING', cache: false));
-  });
-
   runApp(const App());
 }
 
