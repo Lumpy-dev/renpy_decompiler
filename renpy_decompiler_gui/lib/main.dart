@@ -31,6 +31,8 @@ Future<void> loadFlutter() async {
         await rootBundle.loadString('assets/unrpyc_LICENSE', cache: false));
     yield LicenseEntryWithLineBreaks(['renpy'],
         await rootBundle.loadString('assets/renpy_LICENSE', cache: false));
+    yield LicenseEntryWithLineBreaks(['unrpa'],
+        await rootBundle.loadString('assets/unrpa_COPYING', cache: false));
   });
 
   runApp(const App());
