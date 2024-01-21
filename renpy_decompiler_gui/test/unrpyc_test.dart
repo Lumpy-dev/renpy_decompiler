@@ -23,6 +23,11 @@ void main() {
   group('Dart rpyc decryption', () {
     Directory rpaDir = Directory('test/rpa');
 
+    if(!rpaDir.existsSync()) {
+      print('RPA directory not found, skipping tests');
+      return;
+    }
+
     for (var archive in rpaDir.listSync(recursive: true)) {
       if (archive is! File || extension(archive.absolute.path) != '.rpa') {
         continue;
