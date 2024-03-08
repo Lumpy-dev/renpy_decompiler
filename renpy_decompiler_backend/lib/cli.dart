@@ -81,7 +81,7 @@ class RpaCommand extends Command {
     int successAmount = 0;
 
     for (File archive in filesToDecompile) {
-      bool isRPAArchive = isRPAFile(archive);
+      bool isRPAArchive = await isRPAFile(archive);
       if (!isRPAArchive) {
         continue;
       } else {

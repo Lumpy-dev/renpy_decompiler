@@ -4,7 +4,7 @@ import 'package:renpy_decompiler_backend/tree_creator.dart';
 
 class RPAVersionOne extends RPAVersion {
   @override
-  (int offset, int? key) findOffsetAndKey(String header, File file) {
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file) {
     return (0, null);
   }
 
@@ -14,7 +14,7 @@ class RPAVersionOne extends RPAVersion {
 
 class RPAVersionTwo extends RPAVersion {
   @override
-  (int offset, int? key) findOffsetAndKey(String header, File file) {
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file) {
     return (int.parse(header.substring(8), radix: 16), null);
   }
 
@@ -24,7 +24,7 @@ class RPAVersionTwo extends RPAVersion {
 
 class RPAVersionThree extends RPAVersion {
   @override
-  (int offset, int? key) findOffsetAndKey(String header, File file) {
+  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file) {
     List<String> splitHeader = header.split(' ');
     return (
       int.parse(splitHeader[1], radix: 16),
