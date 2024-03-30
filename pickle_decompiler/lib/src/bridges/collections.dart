@@ -1,3 +1,5 @@
+// Copyright © 2024, Lumpy and the project contributors.
+// The content of this file is the property of the creator of this Software
 import 'package:pickle_decompiler/pickle_decompiler.dart';
 
 class DefaultDict<K, V> extends PythonClassInstance {

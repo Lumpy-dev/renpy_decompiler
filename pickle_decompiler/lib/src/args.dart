@@ -1,5 +1,3 @@
-// Converted/modified from Python's pickletools.py: https://github.com/python/cpython/blob/main/Lib/pickletools.py
-
 import 'dart:convert';
 import 'dart:typed_data';
 

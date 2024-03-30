@@ -1,8 +1,4 @@
-// Converted/modified from Python's pickle.py and pickletools.py: https://github.com/python/cpython/blob/main/Lib/pickle.py https://github.com/python/cpython/blob/main/Lib/pickletools.py
-
 typedef Entries = Map<List<int>, List<(int, int, List<int>)>>;
-
-// Mainly copied and translated from https://github.com/python/cpython/blob/3.12/Lib/pickletools.py
 
 String reprByte(int byte) {
   // Check if the byte is a valid ASCII character (0-127)
