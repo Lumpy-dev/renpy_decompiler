@@ -10,9 +10,10 @@ import 'package:renpy_decompiler_backend/tree_creator.dart';
 void main() {
   // Performance between Python and Dart here is not comparable, most of the compute time in Dart is flushing all the data to stdout or a file.
   group('Dart pickle dis against Python pickle dis', () {
-    Directory rpaDir = Directory('tests/rpa');
+    Directory rpaDir = Directory('test/rpa');
+    print(rpaDir.absolute.path);
 
-    if(!rpaDir.existsSync()) {
+    if (!rpaDir.existsSync()) {
       print('RPA directory not found, skipping tests');
       return;
     }
@@ -21,24 +22,24 @@ void main() {
       test('test ${basename(file.path)}\'s dis', () async {
         if (file is File) {
           print('Testing ${file.path}');
-          var indexAndVersion = await findIndexAndVersion(file);
+          List<int> decompressed =
+              (await findIndexAndVersion(file)).decompressedIndex;
 
           File tempObj = File('in.pickle');
-          tempObj.writeAsBytesSync(indexAndVersion.decompressedIndex);
+          tempObj.writeAsBytesSync(decompressed);
 
           print('Running Python');
           var result = await Process.run(
-              'python', ['tests/pickle_dis.py', tempObj.absolute.path],
+              'python', ['test/pickle_dis.py', tempObj.absolute.path],
               runInShell: true);
           print('Python dis finished, exit code: ${result.exitCode}');
 
           print('Running Dart');
-          await dis(indexAndVersion.decompressedIndex,
-              out: File('out_dis_dart.txt').openWrite());
+          await dis(decompressed, out: File('out_dis_dart.txt').openWrite());
           print('Dart dis finished');
 
           expect(
-              MD5().update(File('out_dart.txt').readAsBytesSync()).digest(),
+              MD5().update(File('out_dis_dart.txt').readAsBytesSync()).digest(),
               MD5()
                   .update(File('out_dis_python.txt').readAsBytesSync())
                   .digest());
@@ -49,9 +50,9 @@ void main() {
 
   // Here the performance is comparable, but Dart is still slower because of its flush, if all was kept in memory the results would be the same.
   group('Dart pickle load against Python pickle load', () {
-    Directory rpaDir = Directory('tests/rpa');
+    Directory rpaDir = Directory('test/rpa');
 
-    if(!rpaDir.existsSync()) {
+    if (!rpaDir.existsSync()) {
       print('RPA directory not found, skipping tests');
       return;
     }
@@ -67,7 +68,7 @@ void main() {
 
           print('Running Python');
           var result = await Process.run(
-              'python', ['tests/pickle_load.py', tempObj.absolute.path],
+              'python', ['test/pickle_load.py', tempObj.absolute.path],
               runInShell: true);
           print('Python load finished, exit code: ${result.exitCode}');
           if (result.exitCode != 0) {
@@ -76,9 +77,8 @@ void main() {
           }
 
           print('Running Dart');
-          Map<dynamic, dynamic> outIndex = Unpickler(
-                  file: Uint8List.fromList(indexAndVersion.decompressedIndex))
-              .load();
+          Map<dynamic, dynamic> outIndex =
+              loads(Uint8List.fromList(indexAndVersion.decompressedIndex));
           print('Dart load finished');
 
           print('Writing Dart output to file');

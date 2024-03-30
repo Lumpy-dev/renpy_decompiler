@@ -15,7 +15,8 @@ import 'package:renpy_decompiler_backend/versions/unofficial_rpa.dart';
 import 'package:renpy_decompiler_backend/versions/zix.dart';
 
 abstract class RPAVersion {
-  (int offset, int? key) findOffsetAndKey(String header, List<int> rawHeader, File file);
+  (int offset, int? key) findOffsetAndKey(
+      String header, List<int> rawHeader, File file);
   String get version;
   List<int> get rawVersion => version.codeUnits;
   void postProcess(RPATreeNodeFile source, Sink<List<int>> sink) {
@@ -206,8 +207,8 @@ Future<bool> isRPAFile(File file) async {
 
   String header = utf8.decode(headerLine, allowMalformed: true);
 
-  for(RPAVersion version in RPAVersion.versions) {
-    if(header.startsWith(version.version)) {
+  for (RPAVersion version in RPAVersion.versions) {
+    if (header.startsWith(version.version)) {
       return true;
     }
   }
@@ -244,7 +245,8 @@ Future<
   RPAVersion? currentVersion;
 
   for (var v in RPAVersion.versions) {
-    if (ListEquality().equals(v.rawVersion, headerLine.sublist(0, v.rawVersion.length))) {
+    if (ListEquality()
+        .equals(v.rawVersion, headerLine.sublist(0, v.rawVersion.length))) {
       currentVersion = v;
       break;
     }
@@ -281,10 +283,9 @@ Future<({RPATreeNode tree, RPAVersion version, int fileAmount})> createTree(
     File file) async {
   var decompressedIndex = await findIndexAndVersion(file);
 
-  Map<String, List<dynamic>> index = Map<String, List<dynamic>>.from(Unpickler(
-          file: Uint8List.fromList(decompressedIndex.decompressedIndex),
-          encoding: 'bytes')
-      .load());
+  Map<String, List<dynamic>> index = Map<String, List<dynamic>>.from(loads(
+      Uint8List.fromList(decompressedIndex.decompressedIndex),
+      encoding: 'bytes'));
 
   Map<String, List<List<dynamic>>> normalIndex = {};
 
@@ -293,7 +294,8 @@ Future<({RPATreeNode tree, RPAVersion version, int fileAmount})> createTree(
   }
 
   if (decompressedIndex.key != null) {
-    normalIndex = decompressedIndex.version.deobfuscateIndex(normalIndex, decompressedIndex.key!);
+    normalIndex = decompressedIndex.version
+        .deobfuscateIndex(normalIndex, decompressedIndex.key!);
   } else {
     normalIndex = decompressedIndex.version.normaliseIndex(normalIndex);
   }

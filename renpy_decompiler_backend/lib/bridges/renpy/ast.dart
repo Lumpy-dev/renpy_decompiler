@@ -2,7 +2,7 @@
 
 import 'package:pickle_decompiler/pickle_decompiler.dart';
 
-class PyExpr implements PythonClassDescriptor {
+class PyExpr extends PythonClassDescriptor {
   @override
   List<({String attributeName, PythonSlotType? type})> get describeState => [
         (
@@ -24,7 +24,7 @@ class PyExpr implements PythonClassDescriptor {
   PythonClass get klass => PythonClass('PyExpr', module: 'renpy.ast');
 }
 
-class PyCode implements PythonClassDescriptor {
+class PyCode extends PythonClassDescriptor {
   @override
   List<({String attributeName, PythonSlotType? type})> get describeState => [
         // A 1 was added when serialisation occurred at the start of the state.
@@ -65,11 +65,14 @@ final List<({String attributeName, PythonSlotType? type})> nodeAttributes = [
   ),
 ];
 
-class Say implements PythonClassDescriptor {
+class Say extends PythonClassDescriptor {
   @override
   List<({String attributeName, PythonSlotType? type})> get describeState => [
         ...nodeAttributes,
-        (attributeName: 'who', type: (possibleTypes: [String], nullable: true)),
+        (
+          attributeName: 'who',
+          type: (possibleTypes: [String, PythonClassInstance], nullable: true)
+        ),
         (
           attributeName: 'who_fast',
           type: (possibleTypes: [bool], nullable: false)
@@ -102,7 +105,10 @@ class Say implements PythonClassDescriptor {
           attributeName: 'rollback',
           type: (possibleTypes: [String], nullable: false)
         ),
-        (attributeName: 'identifier', type: pythonAny),
+        (
+          attributeName: 'identifier',
+          type: (possibleTypes: [String], nullable: false)
+        ),
         (
           attributeName: 'explicitIdentifier',
           type: (possibleTypes: [bool], nullable: false)
@@ -113,7 +119,7 @@ class Say implements PythonClassDescriptor {
   PythonClass get klass => PythonClass('Say', module: 'renpy.ast');
 }
 
-class Init implements PythonClassDescriptor {
+class Init extends PythonClassDescriptor {
   @override
   List<({String attributeName, PythonSlotType? type})> get describeState => [
         ...nodeAttributes,
@@ -131,7 +137,7 @@ class Init implements PythonClassDescriptor {
   PythonClass get klass => PythonClass('Init', module: 'renpy.ast');
 }
 
-class Label implements PythonClassDescriptor {
+class Label extends PythonClassDescriptor {
   @override
   List<({String attributeName, PythonSlotType? type})> get describeState => [
         ...nodeAttributes,
@@ -150,7 +156,7 @@ class Label implements PythonClassDescriptor {
   PythonClass get klass => PythonClass('Label', module: 'renpy.ast');
 }
 
-class Python implements PythonClassDescriptor {
+class Python extends PythonClassDescriptor {
   @override
   List<({String attributeName, PythonSlotType? type})> get describeState => [
         ...nodeAttributes,
@@ -737,7 +743,7 @@ class TranslateBlock extends PythonClassDescriptor {
         ),
         (
           attributeName: 'language',
-          type: (possibleTypes: [Object], nullable: false)
+          type: (possibleTypes: [String], nullable: false)
         ),
       ];
 
@@ -799,10 +805,7 @@ class Testcase extends PythonClassDescriptor {
         ),
         (
           attributeName: 'test',
-          type: (
-            possibleTypes: [PythonClassDescriptor, String],
-            nullable: false
-          )
+          type: (possibleTypes: [PythonClassInstance, String], nullable: false)
         ),
       ];
 

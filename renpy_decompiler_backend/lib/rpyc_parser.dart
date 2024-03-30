@@ -49,16 +49,19 @@ String decompileRPYC(File file) {
 
   data = zlib.decode(data);
 
-  List<dynamic> compiled = Unpickler(
-      file: Uint8List.fromList(data),
-      recognizedDescriptors: [...astDescriptors, ...slastDescriptors],
-      recognizedSwappers: [...revertableSwappers, ...pythonSwappers]).load();
+  List<dynamic> compiled = loads(
+    Uint8List.fromList(data),
+    recognizedDescriptors: descriptors,
+    swappers: swappers,
+  );
 
   return parseFile(compiled);
 }
 
 String parseFile(List<dynamic> file) {
-  dynamic version = file.removeAt(0);
+  dynamic version = file[0];
+
+  file = file.sublist(1);
 
   if (version['version'] != 5003000) {
     print('WARNING! Unsupported .RPYC version: ${version['version']}');
@@ -68,6 +71,13 @@ String parseFile(List<dynamic> file) {
     return '';
   }
 
-  return RPYCDecompiler.pprint([], List<PythonClassInstance>.from(file.first))
+  return RPYCDecompiler.pprint(
+          [], List<PythonClassInstance>.from(file.first), Options())
       .join('');
 }
+
+List<PythonClassDescriptor> descriptors = [
+  ...astDescriptors,
+  ...slastDescriptors
+];
+List<PythonClassSwapper> swappers = [...pythonSwappers, ...revertableSwappers];

@@ -3,10 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pickle_decompiler/pickle_decompiler.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/ast.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/python.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/revertable.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/sl2/slast.dart';
 import 'package:renpy_decompiler_backend/rpyc_parser.dart';
 
 class RPYCReader extends StatefulWidget {
@@ -59,11 +55,11 @@ class _RPYCReaderState extends State<RPYCReader> {
     fileBytes = zlib.decode(fileBytes);
 
     try {
-      var out = Unpickler(
-              file: Uint8List.fromList(fileBytes),
-              recognizedDescriptors: [...astDescriptors, ...slastDescriptors],
-              recognizedSwappers: [...revertableSwappers, ...pythonSwappers])
-          .load();
+      var out = loads(
+        Uint8List.fromList(fileBytes),
+        recognizedDescriptors: descriptors,
+        swappers: swappers,
+      );
       parsedOut = parseFile(out);
     } catch (e) {
       if (e is UnimplementedError) {

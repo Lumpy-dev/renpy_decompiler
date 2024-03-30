@@ -1,8 +1,10 @@
 import 'dart:math';
 
 import 'package:pickle_decompiler/pickle_decompiler.dart';
+import 'package:renpy_decompiler_backend/decompilers/atl.dart';
 import 'package:renpy_decompiler_backend/decompilers/base.dart';
 import 'package:renpy_decompiler_backend/decompilers/sl2.dart';
+import 'package:renpy_decompiler_backend/decompilers/testcase.dart';
 import 'package:renpy_decompiler_backend/decompilers/translate.dart';
 
 typedef RPYCDecompilerState = ({
@@ -16,211 +18,44 @@ typedef RPYCDecompilerState = ({
   int lastLinesBehind,
 });
 
-const String tab = '    ';
-
 typedef BlankLineCallback = bool Function(int? lineNumber);
 
-class RPYCDecompiler extends DecompilerBase {
+class Options extends OptionBase {
+  Translator? translator;
+  bool initOffset;
+  Map<String, (String, dynamic)>? slCustomNames;
+
+  Options(
+      {super.indentation = '    ',
+      super.printLock,
+      this.translator,
+      this.initOffset = true,
+      this.slCustomNames});
+}
+
+class RPYCDecompiler extends DecompilerBase<Options> {
   static List<String> pprint(
-      List<String> outSink, List<PythonClassInstance> ast,
-      {int indentLevel = 0,
-      bool decompilePython = false,
-      Translator? translator,
-      bool initOffset = false,
-      bool tagOutsideBlock = false}) {
-    RPYCDecompiler builder =
-        RPYCDecompiler(outSink: outSink, decompilePython: decompilePython);
-    builder.dumpFile(ast, indentLevel, initOffset, tagOutsideBlock);
+      List<String> outSink, List<PythonClassInstance> ast, Options options) {
+    RPYCDecompiler builder = RPYCDecompiler(outSink: outSink, options: options);
+    builder.dump(ast);
     outSink = builder.outSink;
 
     return outSink;
   }
 
-  Map<PythonClass,
+  static final Map<PythonClass,
           void Function(RPYCDecompiler builder, PythonClassInstance ast)>
       dispatch = {
-    PythonClass(module: 'renpy.atl', 'RawMultipurpose'): (builder, ast) {
-      WordConcatenator warpWords = WordConcatenator(false);
-
-      if (ast.state!.containsKey('warp_function') &&
-          ast.state!['warp_function'] != null) {
-        warpWords.append('warp');
-        warpWords.append(ast.state!['warp_function']);
-        warpWords.append(ast.state!['duration']);
-      } else if (ast.state!.containsKey('warper') &&
-          ast.state!['warper'] != null) {
-        warpWords.append(ast.state!['warper']);
-        warpWords.append(ast.state!['duration'].namedArgs['value']);
-      } else if (ast.state!.containsKey('duration') &&
-          ast.state!['duration'] != '0') {
-        warpWords.append(ast.state!['pause']);
-      }
-
-      String warp = warpWords.join();
-      WordConcatenator words = WordConcatenator(
-          warp.isNotEmpty && warp.substring(warp.length - 1) != ' ', true);
-
-      if (ast.state!.containsKey('revolution') &&
-          ast.state!['revolution'] != null) {
-        words.append(ast.state!['revolution']);
-      }
-
-      if (ast.state!.containsKey('circles') && ast.state!['circles'] != '0') {
-        words.append('circles ${ast.state!['circles']}');
-      }
-
-      WordConcatenator splineWords = WordConcatenator(false);
-      for (var entry in ast.state!['splines']) {
-        List<dynamic> expressions = entry[1];
-
-        splineWords.append('knot');
-        for (var expression in expressions..removeLast()) {
-          splineWords.append(expression);
-        }
-        words.append(splineWords.join());
-
-        WordConcatenator propertyWords = WordConcatenator(false);
-        for (var property in ast.state!['properties']) {
-          dynamic key = property[0];
-          dynamic value = property[1];
-
-          propertyWords.append(key);
-          propertyWords.append(value);
-        }
-        words.append(propertyWords.join());
-
-        WordConcatenator expressionWords = WordConcatenator(false);
-        // TODO: There's a lot of cases where pass isn't needed,
-        // since we could reorder stuff so there's never 2 expressions in a row.
-        // (And it's never necessary for the last one,
-        // but we don't know what the last one is since it could get reordered.)
-        bool needsPass = ast.state!['expressions'].length > 1;
-        for (var entry in ast.state!['expressions']) {
-          dynamic expression = entry[0];
-          dynamic withExpression = entry[1];
-
-          expressionWords.append(expression);
-
-          if (withExpression != null) {
-            expressionWords.append('with');
-            expressionWords.append(withExpression);
-          }
-
-          if (needsPass) {
-            expressionWords.append('pass');
-          }
-        }
-        words.append(expressionWords.join());
-
-        String toWrite = warp + words.join();
-
-        if (toWrite.isNotEmpty) {
-          builder.indent();
-          builder.write(toWrite);
-        } else {
-          builder.write(',');
-        }
-      }
-    },
-    PythonClass(module: 'renpy.atl', 'RawBlock'): (builder, ast) {
-      builder.indent();
-      builder.write('block:');
-      builder.printAtl(ast);
-    },
-    PythonClass(module: 'renpy.atl', 'RawChild'): (builder, ast) {
-      builder.indent();
-      builder.write('contains:');
-      builder.printAtl(ast);
-    },
-    PythonClass(module: 'renpy.atl', 'RawChoice'): (builder, ast) {
-      for (var entry in ast.state!['choices']) {
-        String chance = entry[0];
-        PythonClassInstance block = entry[1];
-
-        builder.indent();
-        builder.write('choice');
-        if (chance != '1.0') {
-          builder.write(' $chance');
-        }
-        builder.write(':');
-        builder.printAtl(block);
-      }
-      if (builder.index + 1 < builder.block.length &&
-          builder.block[builder.index + 1].klass ==
-              PythonClass(module: 'renpy.atl', 'RawChoice')) {
-        builder.indent();
-        builder.write('pass');
-      }
-    },
-    PythonClass(module: 'renpy.atl', 'RawContainsExpr'): (builder, ast) {
-      builder.indent();
-      builder.write('contains ${ast.state!['expression'].namedArgs['value']}');
-    },
-    PythonClass(module: 'renpy.atl', 'RawEvent'): (builder, ast) {
-      builder.indent();
-      builder.write('event ${ast.state!['name']}');
-    },
-    PythonClass(module: 'renpy.atl', 'RawFunction'): (builder, ast) {
-      builder.indent();
-      builder.write('function ${ast.state!['expr'].namedArgs['value']}');
-    },
-    PythonClass(module: 'renpy.atl', 'RawOn'): (builder, ast) {
-      for (var entry in (Map.from(ast.state!['handlers']).entries.toList())
-        ..sort((a, b) => a.value.namedArgs['loc'][1]
-            .compareTo(b.value.namedArgs['loc'][1]))) {
-        String name = entry.key;
-        PythonClassInstance block = entry.value;
-
-        builder.indent();
-        builder.write('on $name:');
-        builder.printAtl(block);
-      }
-    },
-    PythonClass(module: 'renpy.atl', 'RawParallel'): (builder, ast) {
-      for (var block in ast.state!['blocks']) {
-        builder.indent();
-        builder.write('parallel:');
-        builder.printAtl(block);
-      }
-      if (builder.index + 1 < builder.block.length &&
-          builder.block[builder.index + 1].klass ==
-              PythonClass(module: 'renpy.atl', 'RawParallel')) {
-        builder.indent();
-        builder.write('pass');
-      }
-    },
-    PythonClass(module: 'renpy.atl', 'RawRepeat'): (builder, ast) {
-      builder.indent();
-      builder.write('repeat');
-      if (ast.state!['repeat'] != null) {
-        builder.write(
-            ' ${ast.state!['repeat']}'); // Not sure if this is even a string, to monitor/test
-      }
-    },
-    PythonClass(module: 'renpy.atl', 'RawTime'): (builder, ast) {
-      builder.indent();
-      builder.write(
-          'time ${ast.state!['time'] is PythonClassInstance ? ast.state!['time'].namedArgs['value'] : ast.state!['time']}');
-    },
-
-    // AST
     PythonClass(module: 'renpy.ast', 'Image'): (builder, ast) {
       builder.requireInit();
       builder.indent();
-      builder.write('image ${ast.namedArgs['imgname'].join(' ')}');
-      if (ast.namedArgs['code'] != null) {
-        dynamic val = ast.namedArgs['code'].namedArgs['source'];
-
-        if (val is PythonClassInstance &&
-            val.klass == PythonClass(module: 'renpy.ast', 'PyExpr')) {
-          val = val.namedArgs['value'];
-        }
-
-        builder.write(' = $val');
+      builder.write('image ${ast.vars['imgname'].join(' ')}');
+      if (ast.vars['code'] != null) {
+        builder.write(' = ${ast.vars['code'].vars['source'].vars['value']}');
       } else {
-        if (ast.namedArgs.containsKey('atl') && ast.namedArgs['atl'] != null) {
+        if (ast.vars['atl'] != null) {
           builder.write(':');
-          builder.printAtl(ast.namedArgs['atl']);
+          builder.printAtl(ast.vars['atl']);
         }
       }
     },
@@ -231,18 +66,26 @@ class RPYCDecompiler extends DecompilerBase {
       String priority = '';
       if (builder.parent?.klass == PythonClass(module: 'renpy.ast', 'Init')) {
         PythonClassInstance init = builder.parent!;
-        if (init.namedArgs['priority'] != builder.initOffset &&
-            init.namedArgs['block'].length != 1 &&
+        if (init.vars['priority'] != builder.initOffset &&
+            init.vars['block'].length != 1 &&
             !builder.shouldComeBefore(init, ast)) {
-          priority = ' ${init.namedArgs['priority'] - builder.initOffset}';
+          priority = ' ${init.vars['priority'] - builder.initOffset}';
         }
       }
-      builder.write('transform$priority ${ast.namedArgs['varname']}');
+      builder.write('transform$priority ${ast.vars['varname']}');
+      if (ast.vars['parameters'] != null) {
+        builder.write(reconstructParaminfo(ast.vars['parameters']));
+      }
+
+      if (ast.vars.containsKey('atl') && ast.vars['atl'] != null) {
+        builder.write(':');
+        builder.printAtl(ast.vars['atl']);
+      }
     },
     PythonClass(module: 'renpy.ast', 'Show'): (builder, ast) {
       builder.indent();
       builder.write('show ');
-      bool needsSpace = builder.printImspec(ast.namedArgs['imspec']);
+      bool needsSpace = builder.printImspec(ast.vars['imspec']);
 
       if (builder.pairedWith != null &&
           (builder.pairedWith == true ||
@@ -255,25 +98,23 @@ class RPYCDecompiler extends DecompilerBase {
         builder.pairedWith = true;
       }
 
-      if (ast.namedArgs.containsKey('atl') && ast.namedArgs['atl'] != null) {
+      if (ast.vars.containsKey('atl') && ast.vars['atl'] != null) {
         builder.write(':');
-        builder.printAtl(ast.namedArgs['atl']);
+        builder.printAtl(ast.vars['atl']);
       }
     },
     PythonClass(module: 'renpy.ast', 'ShowLayer'): (builder, ast) {
       builder.indent();
-      builder.write('show layer ${ast.namedArgs['layer']}');
+      builder.write('show layer ${ast.vars['layer']}');
 
-      if (ast.namedArgs.containsKey('at_list') &&
-          ast.namedArgs['at_list'] != null &&
-          ast.namedArgs['at_list'].isNotEmpty) {
-        List<dynamic> rawATList = ast.namedArgs['at_list'];
+      if (ast.vars['at_list'] != null && ast.vars['at_list'].isNotEmpty) {
+        List<dynamic> rawATList = ast.vars['at_list'];
         List<String> atList = [];
 
         for (var entry in rawATList) {
           if (entry is PythonClassInstance &&
               entry.klass == PythonClass(module: 'renpy.ast', 'PyExpr')) {
-            atList.add(entry.namedArgs['value']);
+            atList.add(entry.vars['value']);
           } else {
             atList.add(entry);
           }
@@ -282,26 +123,25 @@ class RPYCDecompiler extends DecompilerBase {
         builder.write(' at ${atList.join(', ')}');
       }
 
-      if (ast.namedArgs.containsKey('atl') && ast.namedArgs['atl'] != null) {
+      if (ast.vars.containsKey('atl') && ast.vars['atl'] != null) {
         builder.write(':');
-        builder.printAtl(ast.namedArgs['atl']);
+        builder.printAtl(ast.vars['atl']);
       }
     },
     PythonClass(module: 'renpy.ast', 'Scene'): (builder, ast) {
       builder.indent();
       builder.write('scene');
 
-      late bool needsSpace;
+      bool needsSpace;
 
-      if (!ast.namedArgs.containsKey('imspec') ||
-          ast.namedArgs['imspec'] == null) {
-        if (ast.namedArgs['layer'] is String) {
-          builder.write(' onlayer ${ast.namedArgs['layer']}');
+      if (ast.vars['imspec'] == null) {
+        if (ast.vars['layer'] is String) {
+          builder.write(' onlayer ${ast.vars['layer']}');
         }
         needsSpace = true;
       } else {
         builder.write(' ');
-        needsSpace = builder.printImspec(ast.namedArgs['imspec']);
+        needsSpace = builder.printImspec(ast.vars['imspec']);
       }
 
       if (builder.pairedWith != null && builder.pairedWith != false) {
@@ -313,15 +153,15 @@ class RPYCDecompiler extends DecompilerBase {
         builder.pairedWith = true;
       }
 
-      if (ast.namedArgs.containsKey('atl') && ast.namedArgs['atl'] != null) {
+      if (ast.vars.containsKey('atl') && ast.vars['atl'] != null) {
         builder.write(':');
-        builder.printAtl(ast.namedArgs['atl']);
+        builder.printAtl(ast.vars['atl']);
       }
     },
     PythonClass(module: 'renpy.ast', 'Hide'): (builder, ast) {
       builder.indent();
       builder.write('hide ');
-      bool needsSpace = builder.printImspec(ast.namedArgs['imspec']);
+      bool needsSpace = builder.printImspec(ast.vars['imspec']);
       if (builder.pairedWith != null && builder.pairedWith != false) {
         if (needsSpace) {
           builder.write(' ');
@@ -331,27 +171,43 @@ class RPYCDecompiler extends DecompilerBase {
       }
     },
     PythonClass(module: 'renpy.ast', 'With'): (builder, ast) {
-      if (ast.namedArgs.containsKey('paired') &&
-          ast.namedArgs['paired'] != null) {
+      if (ast.vars['paired'] != null) {
         if (!(builder.block[builder.index + 2].klass ==
                 PythonClass(module: 'renpy.ast', 'With') &&
-            builder.block[builder.index + 2].namedArgs['expr'] ==
-                ast.namedArgs['paired'])) {
+            builder.block[builder.index + 2].vars['expr'].vars['value'] ==
+                ast.vars['paired'].vars['value'])) {
           throw Exception(
-              'Unmateched paired with ${builder.pairedWith} != ${ast.namedArgs['expr']}');
+              'Unmateched paired with ${builder.pairedWith} != ${ast.vars['expr']}');
         }
 
-        builder.pairedWith = ast.namedArgs['paired'].namedArgs['value'];
-      } else if (builder.pairedWith != null) {
+        builder.pairedWith = ast.vars['paired'].vars['value'];
+      } else if (builder.pairedWith != false) {
         if (builder.pairedWith != true) {
-          builder.write(' with ${ast.namedArgs['expr'].namedArgs['value']}');
+          builder.write(' with ${ast.vars['expr'].vars['value']}');
         }
         builder.pairedWith = false;
       } else {
-        builder.advanceToLine(ast.namedArgs['linenumber']);
+        builder.advanceToLine(ast.vars['linenumber']);
         builder.indent();
-        builder.write('with ${ast.namedArgs['expr']}');
+        builder.write('with ${ast.vars['expr'].vars['value']}');
         builder.pairedWith = false;
+      }
+    },
+    PythonClass(module: 'renpy.ast', 'Camera'): (builder, ast) {
+      builder.indent();
+      builder.write('camera');
+
+      if (ast.vars['layer'] != 'master') {
+        builder.write(' ${ast.vars['name']}');
+      }
+
+      if (ast.vars['at_list'].isNotEmpty) {
+        builder.write(' at ${ast.vars['at_list'].join(', ')}');
+      }
+
+      if (ast.vars['atl'] != null) {
+        builder.write(':');
+        builder.printAtl(ast.vars['atl']);
       }
     },
     PythonClass(module: 'renpy.ast', 'Label'): (builder, ast) {
@@ -360,33 +216,42 @@ class RPYCDecompiler extends DecompilerBase {
               PythonClass(module: 'renpy.ast', 'Call')) {
         return;
       }
-      int remainingBlocks = builder.block.length - builder.index;
-      if (remainingBlocks > 1) {
-        PythonClassInstance nextAst = builder.block[builder.index + 1];
-        if (ast.namedArgs['block'].isEmpty &&
-            (!ast.namedArgs.containsKey('parameters') ||
-                ast.namedArgs['parameters'] == null) &&
-            (nextAst.klass == PythonClass(module: 'renpy.ast', 'Menu') ||
-                (remainingBlocks > 2 &&
-                    nextAst.klass == PythonClass(module: 'renpy.ast', 'Say') &&
-                    builder.sayBelongsToMenu(
-                        nextAst, builder.block[builder.index + 2])))) {
-          builder.labelInsideMenu = ast;
-          return;
+      if ((ast.vars['blocks'] == null || ast.vars['blocks'].isEmpty) &&
+          ast.vars['parameters'] == null) {
+        int remainingBlocks = builder.block.length - builder.index;
+        PythonClassInstance? nextAst;
+        if (remainingBlocks > 1) {
+          nextAst = builder.block[builder.index + 1];
+          if (nextAst.klass == PythonClass(module: 'renpy.ast', 'Menu') &&
+              nextAst.vars['linenumber'] == ast.vars['linenumber']) {
+            builder.labelInsideMenu = ast;
+            return;
+          }
+        }
+
+        if (remainingBlocks > 2) {
+          PythonClassInstance nextNextAst = builder.block[builder.index + 2];
+          if (nextAst!.klass == PythonClass(module: 'renpy.ast', 'Say') &&
+              nextNextAst.klass == PythonClass(module: 'renpy.ast', 'Menu') &&
+              nextNextAst.vars['linenumber'] == ast.vars['linenumber'] &&
+              builder.sayBelongsToMenu(nextAst, nextNextAst)) {
+            builder.labelInsideMenu = ast;
+            return;
+          }
         }
       }
 
-      builder.advanceToLine(ast.namedArgs['linenumber']);
+      builder.advanceToLine(ast.vars['linenumber']);
       builder.indent();
 
-      List<String> outSink = builder.outSink;
+      List<String> outSink = List.from(builder.outSink);
       builder.outSink = [];
       bool missingInit = builder.missingInit;
       builder.missingInit = false;
       try {
         builder.write(
-            'label ${ast.namedArgs['name']}${ast.namedArgs.containsKey('parameters') ? reconstructParaminfo(ast.namedArgs['parameters']) : ''}${ast.namedArgs.containsKey('hide') && ast.namedArgs['hide'] ? ' hide:' : ':'}');
-        builder.printNodes(ast.namedArgs['block'], 1);
+            'label ${ast.vars['name']}${reconstructParaminfo(ast.vars['parameters'])}${ast.vars.containsKey('hide') && ast.vars['hide'] == true ? ' hide:' : ''}:');
+        builder.printNodes(ast.vars['block'], 1);
       } finally {
         if (builder.missingInit) {
           outSink.add('init ');
@@ -399,88 +264,86 @@ class RPYCDecompiler extends DecompilerBase {
     PythonClass(module: 'renpy.ast', 'Jump'): (builder, ast) {
       builder.indent();
       builder.write(
-          'jump ${ast.namedArgs.containsKey('expression') && ast.namedArgs['expression'] != null ? 'expression ' : ''}${ast.namedArgs['target'] is PythonClassInstance ? ast.namedArgs['target'].namedArgs['value'] : ast.namedArgs['target']}');
+          'jump ${ast.vars.containsKey('expression') && ast.vars['expression'] == true ? 'expression ' : ''}${ast.vars['target'] is PythonClassInstance ? ast.vars['target'].vars['value'] : ast.vars['target']}');
     },
     PythonClass(module: 'renpy.ast', 'Call'): (builder, ast) {
       builder.indent();
       WordConcatenator words = WordConcatenator(false);
       words.append('call');
-      if (ast.namedArgs.containsKey('expression') &&
-          ast.namedArgs['expression'] == true) {
+      if (ast.vars.containsKey('expression') &&
+          ast.vars['expression'] == true) {
         words.append('expression');
       }
-      if (ast.namedArgs['label'] is PythonClassInstance) {
-        words.append(ast.namedArgs['label'].namedArgs['value']);
+      if (ast.vars['label'] is PythonClassInstance) {
+        words.append(ast.vars['label'].vars['value']);
       } else {
-        words.append(ast.namedArgs['label']);
+        words.append(ast.vars['label']);
       }
 
-      if (ast.namedArgs.containsKey('arguments') &&
-          ast.namedArgs['arguments'] != null) {
-        if (ast.namedArgs.containsKey('expression') &&
-            ast.namedArgs['expression'] == true) {
+      if (ast.vars['arguments'] != null) {
+        if (ast.vars['expression']) {
           words.append('pass');
         }
-        words.append(reconstructArginfo(ast.namedArgs['arguments']));
+        words.append(reconstructArginfo(ast.vars['arguments']));
       }
 
       PythonClassInstance nextBlock = builder.block[builder.index + 1];
 
       if (nextBlock.klass == PythonClass(module: 'renpy.ast', 'Label')) {
-        words.append('from ${nextBlock.namedArgs['name']}');
+        words.append('from ${nextBlock.vars['name']}');
       }
 
       builder.write(words.join());
     },
     PythonClass(module: 'renpy.ast', 'Return'): (builder, ast) {
-      if ((!ast.namedArgs.containsKey('expression') ||
-              ast.namedArgs['expression'] == null) &&
+      if (ast.vars['expression'] == null &&
           builder.parent == null &&
           builder.index + 1 == builder.block.length &&
-          builder.index != 0 &&
-          ast.namedArgs['linenumber'] ==
-              builder.block[builder.index - 1].namedArgs['linenumber']) {
+          builder.index > 0 &&
+          ast.vars['linenumber'] ==
+              builder.block[builder.index - 1].vars['linenumber']) {
         return;
       }
 
-      builder.advanceToLine(ast.namedArgs['linenumber']);
+      builder.advanceToLine(ast.vars['linenumber']);
       builder.indent();
       builder.write('return');
 
-      if (ast.namedArgs.containsKey('expression') &&
-          ast.namedArgs['expression'] != null) {
-        builder.write(' ${ast.namedArgs['expression'].namedArgs['value']}');
+      if (ast.vars['expression'] != null) {
+        builder.write(' ${ast.vars['expression'].vars['value']}');
       }
     },
     PythonClass(module: 'renpy.ast', 'If'): (builder, ast) {
       First statement = First(yesValue: 'if', noValue: 'elif');
 
-      for (int i = 0; i < ast.namedArgs['entries'].length; i++) {
-        dynamic condition = ast.namedArgs['entries'][i][0];
+      for (int i = 0; i < ast.vars['entries'].length; i++) {
+        dynamic condition = ast.vars['entries'][i][0];
         List<PythonClassInstance> block =
-            List<PythonClassInstance>.from(ast.namedArgs['entries'][i][1]);
+            List<PythonClassInstance>.from(ast.vars['entries'][i][1]);
 
-        if (i + 1 == ast.namedArgs['entries'].length && condition is! String) {
+        if (i + 1 == ast.vars['entries'].length &&
+            condition is PythonClassInstance &&
+            condition.klass != PythonClass(module: 'renpy.ast', 'PyExpr')) {
           builder.indent();
           builder.write('else:');
         } else {
           if (condition is PythonClassInstance &&
-              condition.namedArgs.containsKey('linenumber')) {
-            builder.advanceToLine(condition.namedArgs['linenumber']);
+              condition.vars.containsKey('linenumber')) {
+            builder.advanceToLine(condition.vars['linenumber']);
           }
           builder.indent();
           String call = statement.call();
-          if (call == 'elif' && condition == 'True') {
-            call = 'else';
-          }
-
-          if (condition is PythonClassInstance &&
-              condition.klass == PythonClass(module: 'renpy.ast', 'PyExpr')) {
-            condition = condition.namedArgs['value'];
-          }
 
           if (call != 'else') {
-            builder.write('$call $condition:');
+            if (call == 'elif' &&
+                (condition == 'True' ||
+                    (condition is PythonClassInstance &&
+                        condition.vars['value'] == 'True'))) {
+              builder.write('else:');
+            } else {
+              builder.write(
+                  '$call ${condition is PythonClassInstance ? condition.vars['value'] : condition}:');
+            }
           } else {
             builder.write('$call:');
           }
@@ -490,8 +353,8 @@ class RPYCDecompiler extends DecompilerBase {
     },
     PythonClass(module: 'renpy.ast', 'While'): (builder, ast) {
       builder.indent();
-      builder.write('while ${ast.namedArgs['condition'].namedArgs['value']}');
-      builder.printNodes(ast.namedArgs['block'], 1);
+      builder.write('while ${ast.vars['condition'].vars['value']}');
+      builder.printNodes(ast.vars['block'], 1);
     },
     PythonClass(module: 'renpy.ast', 'Pass'): (builder, ast) {
       if (builder.index != 0 &&
@@ -505,12 +368,12 @@ class RPYCDecompiler extends DecompilerBase {
               PythonClass(module: 'renpy.ast', 'Call') &&
           builder.block[builder.index - 1].klass ==
               PythonClass(module: 'renpy.ast', 'Label') &&
-          builder.block[builder.index - 2].namedArgs['linenumber'] ==
-              ast.namedArgs['linenumber']) {
+          builder.block[builder.index - 2].vars['linenumber'] ==
+              ast.vars['linenumber']) {
         return;
       }
 
-      builder.advanceToLine(ast.namedArgs['linenumber']);
+      builder.advanceToLine(ast.vars['linenumber']);
       builder.indent();
       builder.write('pass');
     },
@@ -518,60 +381,56 @@ class RPYCDecompiler extends DecompilerBase {
       bool inInit = builder.inInit;
       builder.inInit = true;
       try {
-        if (ast.namedArgs['block'].length == 1 &&
+        if (ast.vars['block'].length == 1 &&
             ([
                   PythonClass(module: 'renpy.ast', 'Define'),
                   PythonClass(module: 'renpy.ast', 'Default'),
                   PythonClass(module: 'renpy.ast', 'Transform')
-                ].contains(ast.namedArgs['block'].first.klass) ||
-                (ast.namedArgs['priority'] == -500 + builder.initOffset &&
-                    ast.namedArgs['block'].first.klass ==
+                ].contains(ast.vars['block'].first.klass) ||
+                (ast.vars['priority'] == -500 + builder.initOffset &&
+                    ast.vars['block'].first.klass ==
                         PythonClass(module: 'renpy.ast', 'Screen')) ||
-                (ast.namedArgs['priority'] == builder.initOffset &&
-                    ast.namedArgs['block'].first.klass ==
+                (ast.vars['priority'] == builder.initOffset &&
+                    ast.vars['block'].first.klass ==
                         PythonClass(module: 'renpy.ast', 'Style')) ||
-                (ast.namedArgs['priority'] == 500 + builder.initOffset &&
-                    ast.namedArgs['block'].first.klass ==
+                (ast.vars['priority'] == 500 + builder.initOffset &&
+                    ast.vars['block'].first.klass ==
                         PythonClass(module: 'renpy.ast', 'Testcase')) ||
-                (ast.namedArgs['priority'] == 0 + builder.initOffset &&
-                    ast.namedArgs['block'].first.klass ==
+                (ast.vars['priority'] == 0 + builder.initOffset &&
+                    ast.vars['block'].first.klass ==
                         PythonClass(module: 'renpy.ast', 'UserStatement') &&
-                    ast.namedArgs['block'].first.namedArgs['line']
+                    ast.vars['block'].first.vars['line']
                         .startsWith('layeredimage ')) ||
-                (ast.namedArgs['priority'] ==
-                        (builder.is356c6e34OrLater ? 500 : 990) +
-                            builder.initOffset &&
-                    ast.namedArgs['block'].first.klass ==
+                (ast.vars['priority'] == 500 + builder.initOffset &&
+                    ast.vars['block'].first.klass ==
                         PythonClass(module: 'renpy.ast', 'Image'))) &&
-            !builder.shouldComeBefore(ast, ast.namedArgs['block'].first)) {
-          builder.printNodes(ast.namedArgs['block']);
-        } else if (ast.namedArgs['block'].length == 0 &&
-            ast.namedArgs['priority'] == builder.initOffset &&
-            (ast.namedArgs['block'] as List<PythonClassInstance>).every(
+            !builder.shouldComeBefore(ast, ast.vars['block'].first)) {
+          builder.printNodes(ast.vars['block']);
+        } else if (ast.vars['block'].length == 0 &&
+            ast.vars['priority'] == builder.initOffset &&
+            (ast.vars['block'] as List<PythonClassInstance>).every((element) =>
+                element.klass ==
+                PythonClass(module: 'renpy.ast', 'TranslateString')) &&
+            (ast.vars['block'] as List<PythonClassInstance>).sublist(1).every(
                 (element) =>
-                    element.klass ==
-                    PythonClass(module: 'renpy.ast', 'TranslateString')) &&
-            (ast.namedArgs['block'] as List<PythonClassInstance>)
-                .sublist(1)
-                .every((element) =>
-                    element.namedArgs['language'] ==
-                    ast.namedArgs['block'].first.namedArgs['language'])) {
-          builder.printNodes(ast.namedArgs['block']);
+                    element.vars['language'] ==
+                    ast.vars['block'].first.vars['language'])) {
+          builder.printNodes(ast.vars['block']);
         } else {
           builder.indent();
           builder.write('init');
-          if (ast.namedArgs['priority'] != builder.initOffset) {
-            builder.write(' ${ast.namedArgs['priority'] - builder.initOffset}');
+          if (ast.vars['priority'] != builder.initOffset) {
+            builder.write(' ${ast.vars['priority'] - builder.initOffset}');
           }
 
-          if (ast.namedArgs['block'].length == 1 &&
-              !builder.shouldComeBefore(ast, ast.namedArgs['block'].first)) {
+          if (ast.vars['block'].length == 1 &&
+              !builder.shouldComeBefore(ast, ast.vars['block'].first)) {
             builder.write(' ');
             builder.skipIndentUntilWrite = true;
-            builder.printNodes(ast.namedArgs['block']);
+            builder.printNodes(ast.vars['block']);
           } else {
             builder.write(':');
-            builder.printNodes(ast.namedArgs['block'], 1);
+            builder.printNodes(ast.vars['block'], 1);
           }
         }
       } finally {
@@ -582,57 +441,56 @@ class RPYCDecompiler extends DecompilerBase {
       builder.indent();
       builder.write('menu');
       if (builder.labelInsideMenu != null) {
-        builder.write(' ${builder.labelInsideMenu!.namedArgs['name']}');
+        builder.write(' ${builder.labelInsideMenu!.vars['name']}');
         builder.labelInsideMenu = null;
       }
 
-      if (ast.namedArgs.containsKey('arguments') &&
-          ast.namedArgs['arguments'] != null) {
-        builder.write(reconstructArginfo(ast.namedArgs['arguments']));
+      if (ast.vars.containsKey('arguments') && ast.vars['arguments'] != null) {
+        builder.write(reconstructArginfo(ast.vars['arguments']));
       }
 
       builder.write(':');
 
       builder.increaseIndent(() {
-        if (ast.namedArgs['with_'] != null) {
+        if (ast.vars['with_'] != null) {
           builder.indent();
-          builder.write('with ${ast.namedArgs['with_']}');
+          builder.write('with ${ast.vars['with_']}');
         }
 
-        if (ast.namedArgs['set'] != null) {
+        if (ast.vars['set'] != null) {
           builder.indent();
-          builder.write('set ${ast.namedArgs['set']}');
+          builder.write('set ${ast.vars['set']}');
         }
 
         List<dynamic> itemArguments;
 
-        if (ast.namedArgs.containsKey('item_arguments')) {
-          itemArguments = ast.namedArgs['item_arguments'];
+        if (ast.vars.containsKey('item_arguments')) {
+          itemArguments = ast.vars['item_arguments'];
         } else {
           itemArguments =
-              List.generate(ast.namedArgs['items'].length, (index) => null);
+              List.generate(ast.vars['items'].length, (index) => null);
         }
 
-        for (int i = 0; i < ast.namedArgs['items'].length; i++) {
-          String label = ast.namedArgs['items'][i][0];
-          dynamic condition = ast.namedArgs['items'][i][1];
-          List<PythonClassInstance> block = List<PythonClassInstance>.from(
-              ast.namedArgs['items'][i][2] ?? []);
-
+        for (int i = 0; i < ast.vars['items'].length; i++) {
+          var [label, condition, rawBlock] = ast.vars['items'][i];
+          var block = rawBlock == null
+              ? null
+              : List<PythonClassInstance>.from(rawBlock);
           dynamic arguments = itemArguments[i];
-          if (builder.translator != null) {
-            label = builder.translator!.strings[label] ?? label;
+
+          if (builder.options.translator != null) {
+            label = builder.options.translator!.strings[label] ?? label;
           }
 
           RPYCDecompilerState? state;
 
           if (condition is PythonClassInstance &&
-              condition.namedArgs.containsKey('linenumber')) {
+              condition.vars.containsKey('linenumber')) {
             if (builder.sayInsideMenu != null &&
-                condition.namedArgs['linenumber'] > builder.lineNumber + 1) {
+                condition.vars['linenumber'] > builder.lineNumber + 1) {
               builder.printSayInsideMenu();
             }
-            builder.advanceToLine(condition.namedArgs['linenumber']);
+            builder.advanceToLine(condition.vars['linenumber']);
           } else if (builder.sayInsideMenu != null) {
             state = builder.saveState();
             builder.mostLinesBehind = builder.lastLinesBehind;
@@ -642,7 +500,7 @@ class RPYCDecompiler extends DecompilerBase {
           builder.printMenuItem(label, condition, block, arguments);
 
           if (state != null) {
-            if (builder.lastLinesBehind > state.lastLinesBehind) {
+            if (builder.mostLinesBehind > state.lastLinesBehind) {
               builder.rollbackState(state);
               builder.printMenuItem(label, condition, block, arguments);
             } else {
@@ -664,67 +522,83 @@ class RPYCDecompiler extends DecompilerBase {
         builder.printPython(ast, true),
     PythonClass('Define', module: 'renpy.ast'): (builder, ast) =>
         builder.printDefine(ast),
-    PythonClass('Default', module: 'renpy.ast'): (builder, ast) =>
-        builder.printDefine(ast),
+    PythonClass('Default', module: 'renpy.ast'): (builder, ast) {
+      builder.requireInit();
+      builder.indent();
+
+      String priority = '';
+      if (builder.parent?.klass == PythonClass(module: 'renpy.ast', 'Init')) {
+        PythonClassInstance init = builder.parent!;
+        if (init.vars['priority'] != builder.initOffset &&
+            init.vars['block'].length == 1 &&
+            !builder.shouldComeBefore(init, ast)) {
+          priority = ' ${init.vars['priority'] - builder.initOffset}';
+        }
+      }
+
+      if (ast.vars['store'] == 'store') {
+        builder.write(
+            'default$priority ${ast.vars['varname']} = ${ast.vars['code'].vars['source'].vars['value']}');
+      } else {
+        builder.write(
+            'default$priority ${ast.vars['store'].substring(6)}.${ast.vars['varname']} = ${ast.vars['code'].vars['source'].vars['value']}');
+      }
+    },
     PythonClass('Say', module: 'renpy.ast'): (builder, ast) =>
         builder.printSay(ast),
     PythonClass('UserStatement', module: 'renpy.ast'): (builder, ast) {
       builder.indent();
-      builder.write(ast.namedArgs['line']);
+      builder.write(ast.vars['line']);
 
-      if (ast.namedArgs.containsKey('block') &&
-          ast.namedArgs['block'].isNotEmpty) {
+      if (ast.vars.containsKey('block') &&
+          ast.vars['block'] != null &&
+          ast.vars['block'].isNotEmpty) {
         builder.increaseIndent(() {
-          builder.printLex(ast.namedArgs['block']);
+          builder.printLex(ast.vars['block']);
         });
       }
     },
-    PythonClass('PostUserStatement', module: 'renpy.ast'): (builder, ast) {},
     PythonClass('Style', module: 'renpy.ast'): (builder, ast) {
       builder.requireInit();
       Map<int, WordConcatenator> keywords = {
-        ast.namedArgs['linenumber']: WordConcatenator(false, true)
+        ast.vars['linenumber']: WordConcatenator(false, true)
       };
 
-      if (ast.namedArgs['parent'] != null) {
-        keywords[ast.namedArgs['linenumber']]!
-            .append('is ${ast.namedArgs['parent']}');
+      if (ast.vars['parent'] != null) {
+        keywords[ast.vars['linenumber']]!.append('is ${ast.vars['parent']}');
       }
-      if (ast.namedArgs['clear']) {
-        keywords[ast.namedArgs['linenumber']]!.append('clear');
+      if (ast.vars['clear']) {
+        keywords[ast.vars['linenumber']]!.append('clear');
       }
-      if (ast.namedArgs['take'] != null) {
-        keywords[ast.namedArgs['linenumber']]!
-            .append('take ${ast.namedArgs['take']}');
+      if (ast.vars['take'] != null) {
+        keywords[ast.vars['linenumber']]!.append('take ${ast.vars['take']}');
       }
-      for (String delName in ast.namedArgs['delattr']) {
-        keywords[ast.namedArgs['linenumber']]!.append('del $delName');
+      for (String delName in ast.vars['delattr']) {
+        keywords[ast.vars['linenumber']]!.append('del $delName');
       }
 
-      if (ast.namedArgs['variant'] != null) {
-        if (!keywords
-            .containsKey(ast.namedArgs['variant'].namedArgs['linenumber'])) {
-          keywords[ast.namedArgs['variant'].namedArgs['linenumber']] =
+      if (ast.vars['variant'] != null) {
+        if (!keywords.containsKey(ast.vars['variant'].vars['linenumber'])) {
+          keywords[ast.vars['variant'].vars['linenumber']] =
               WordConcatenator(false);
         }
-        if (ast.namedArgs['variant'] is PythonClassInstance) {
-          keywords[ast.namedArgs['variant'].namedArgs['linenumber']]!
-              .append('variant ${ast.namedArgs['variant'].namedArgs['value']}');
+        if (ast.vars['variant'] is PythonClassInstance) {
+          keywords[ast.vars['variant'].vars['linenumber']]!
+              .append('variant ${ast.vars['variant'].vars['value']}');
         } else {
-          keywords[ast.namedArgs['variant'].namedArgs['linenumber']]!
-              .append('variant ${ast.namedArgs['variant']}');
+          keywords[ast.vars['variant'].vars['linenumber']]!
+              .append('variant ${ast.vars['variant']}');
         }
       }
-      for (var entry in Map.from(ast.namedArgs['properties']).entries) {
-        if (!keywords.containsKey(entry.value.namedArgs['linenumber'])) {
-          keywords[entry.value.namedArgs['linenumber']] =
-              WordConcatenator(false);
+      for (var entry in Map.from(ast.vars['properties']).entries) {
+        if (!keywords.containsKey(entry.value.vars['linenumber'])) {
+          keywords[entry.value.vars['linenumber']] = WordConcatenator(false);
         }
         if (entry.value is PythonClassInstance) {
-          keywords[entry.value.namedArgs['linenumber']]!
-              .append('${entry.key} ${entry.value.namedArgs['value']}');
+          keywords[entry.value.vars['linenumber']]!
+              .append('${entry.key} ${entry.value.vars['value']}');
         } else {
-          keywords[entry.value.namedArgs['linenumber']]!
+          keywords[entry.value.vars['linenumber']]!
               .append('${entry.key} ${entry.value}');
         }
       }
@@ -736,7 +610,7 @@ class RPYCDecompiler extends DecompilerBase {
       finalKeywords.sort((a, b) => a.$1.compareTo(b.$1));
 
       builder.indent();
-      builder.write('style ${ast.namedArgs['style_name']}');
+      builder.write('style ${ast.vars['style_name']}');
 
       if (finalKeywords[0].$2.isNotEmpty) {
         builder.write(' ${finalKeywords[0].$2}');
@@ -755,9 +629,9 @@ class RPYCDecompiler extends DecompilerBase {
     PythonClass('Translate', module: 'renpy.ast'): (builder, ast) {
       builder.indent();
       builder.write(
-          'translate to ${ast.namedArgs.containsKey('language') ? (ast.namedArgs['language'] ?? 'None') : 'None'} ${ast.namedArgs['identifier']}');
+          'translate to ${ast.vars.containsKey('language') ? (ast.vars['language'] ?? 'None') : 'None'} ${ast.vars['identifier']}');
 
-      builder.printNodes(ast.namedArgs['block'], 1);
+      builder.printNodes(ast.vars['block'], 1);
     },
     PythonClass('EndTranslate', module: 'renpy.ast'): (builder, ast) {},
     PythonClass('TranslateString', module: 'renpy.ast'): (builder, ast) {
@@ -766,22 +640,21 @@ class RPYCDecompiler extends DecompilerBase {
       if (!(builder.index > 0 &&
           builder.block[builder.index - 1].klass ==
               PythonClass(module: 'renpy.ast', 'TranslateString') &&
-          builder.block[builder.index - 1].namedArgs['language'] ==
-              ast.namedArgs['language'])) {
+          builder.block[builder.index - 1].vars['language'] ==
+              ast.vars['language'])) {
         builder.indent();
-        builder
-            .write('translate ${ast.namedArgs['language'] ?? 'None'} strings:');
+        builder.write('translate ${ast.vars['language'] ?? 'None'} strings:');
       }
 
       builder.increaseIndent(() {
-        builder.advanceToLine(ast.namedArgs['linenumber']);
+        builder.advanceToLine(ast.vars['linenumber']);
         builder.indent();
-        builder.write('old "${stringEscape(ast.namedArgs['old'])}"');
-        if (ast.namedArgs.containsKey('newloc')) {
-          builder.advanceToLine(ast.namedArgs['newloc'][1]);
+        builder.write('old "${stringEscape(ast.vars['old'])}"');
+        if (ast.vars.containsKey('newloc')) {
+          builder.advanceToLine(ast.vars['newloc'][1]);
         }
         builder.indent();
-        builder.write('new "${stringEscape(ast.namedArgs['new'])}"');
+        builder.write('new "${stringEscape(ast.vars['new'])}"');
       });
     },
     PythonClass('TranslateBlock', module: 'renpy.ast'): (builder, ast) {
@@ -792,36 +665,21 @@ class RPYCDecompiler extends DecompilerBase {
     },
     PythonClass('Screen', module: 'renpy.ast'): (builder, ast) {
       builder.requireInit();
-      PythonClassInstance screen = ast.namedArgs['screen'];
+      PythonClassInstance screen = ast.vars['screen'];
       if (screen.klass ==
           PythonClass(module: 'renpy.screenlang', 'ScreenLangScreen')) {
-        // TODO: Port screen decompiler
-        builder.skipIndentUntilWrite = true;
-
-        throw UnimplementedError('screen decompiler not ported yet');
+        throw UnimplementedError(
+            'Decompiling screen language version 1 screens is no longer supported. Use the legacy branch of Unrpyc (by CensoredUsername on Github) if this is required');
       } else if (screen.klass ==
           PythonClass(module: 'renpy.sl2.slast', 'SLScreen')) {
-        // ignore: unused_element
-        int printAtlCallback(
-            int linenumber, int indentLevel, PythonClassInstance atl) {
-          builder.skipIndentUntilWrite = false;
-
-          int oldLineNumber = builder.lineNumber;
-          builder.lineNumber = linenumber;
-          builder.increaseIndent(() {
-            builder.printAtl(atl);
-          }, indentLevel - builder.indentLevel);
-          int newLineNumber = builder.lineNumber;
-          builder.lineNumber = oldLineNumber;
-          return newLineNumber;
-        }
-
         var out = SL2Decompiler.pprint(
-            builder.outSink, [screen], printAtlCallback,
-            indentLevel: builder.indentLevel,
-            lineNumber: builder.lineNumber,
-            skipIndentUntilWrite: builder.skipIndentUntilWrite,
-            tagOutsideBlock: builder.tagOutsideBlock);
+          builder.outSink,
+          screen,
+          builder.options,
+          indentLevel: builder.indentLevel,
+          lineNumber: builder.lineNumber,
+          skipIndentUntilWrite: builder.skipIndentUntilWrite,
+        );
 
         builder.lineNumber = out.$1;
         builder.outSink = out.$2;
@@ -834,10 +692,21 @@ class RPYCDecompiler extends DecompilerBase {
     PythonClass('Testcase', module: 'renpy.ast'): (builder, ast) {
       builder.requireInit();
       builder.indent();
-      builder.write('testcase ${ast.namedArgs['label']}:');
-      // TODO: Port testcase decompiler
+      builder.write('testcase ${ast.vars['label']}:');
+      var out = TestcaseDecompiler.pprint(
+          builder.outSink,
+          List<PythonClassInstance>.from(ast.vars['test'].vars['block']),
+          builder.options,
+          indentLevel: builder.indentLevel + 1,
+          lineNumber: builder.lineNumber,
+          skipIndentUntilWrite: builder.skipIndentUntilWrite);
+      builder.lineNumber = out.$1;
+      builder.outSink = out.$2;
       builder.skipIndentUntilWrite = false;
-      throw UnimplementedError();
+    },
+    PythonClass('RPY', module: 'renpy.ast'): (builder, ast) {
+      builder.indent();
+      builder.write('rpy python ${ast.vars['rest']}');
     },
   };
 
@@ -847,18 +716,38 @@ class RPYCDecompiler extends DecompilerBase {
   bool inInit = false;
   bool missingInit = false;
   int initOffset = 0;
-  bool is356c6e34OrLater = false;
   int mostLinesBehind = 0;
   int lastLinesBehind = 0;
-  bool tagOutsideBlock = false;
-  bool decompilePython;
-  Translator? translator;
 
-  RPYCDecompiler(
-      {super.outSink,
-      super.indentation,
-      this.decompilePython = false,
-      this.translator});
+  RPYCDecompiler({
+    super.outSink,
+    required super.options,
+  });
+
+  @override
+  (int, List<String>) dump(ast,
+      [int indentLevel = 0,
+      int lineNumber = 1,
+      bool skipIndentUntilWrite = false]) {
+    if (options.translator != null) {
+      options.translator!.translateDialogue(ast);
+    }
+
+    if (options.initOffset && ast is List) {
+      setBestInitOffset(List<PythonClassInstance>.from(ast));
+    }
+
+    super.dump(ast, indentLevel, lineNumber, true);
+
+    for (var m in blankLineQueue) {
+      m(null);
+    }
+
+    assert(!missingInit,
+        'A required init, init label, or translate block was missing');
+
+    return (this.lineNumber, outSink);
+  }
 
   static String encodeSayString(String s) {
     return '"${s.replaceAll('\\', '\\\\').replaceAll('\n', '\\n').replaceAll('"', '\\"').replaceAll(RegExp(r'(?<= ) '), '\\ ')}"';
@@ -875,39 +764,51 @@ class RPYCDecompiler extends DecompilerBase {
   static String sayGetCode(PythonClassInstance ast, [bool inMenu = false]) {
     List<String> rv = [];
 
-    if (ast.namedArgs['who'] != null) {
-      rv.add(ast.namedArgs['who']);
-    }
-
-    if (ast.namedArgs.containsKey('attributes') &&
-        ast.namedArgs['attributes'] != null) {
-      rv.addAll(List<String>.from(ast.namedArgs['attributes']));
-    }
-
-    if (ast.namedArgs.containsKey('temporary_attributes') &&
-        ast.namedArgs['temporary_attributes'] != null) {
-      rv.add('@');
-      rv.addAll(List.from(ast.namedArgs['temporary_attributes']));
-    }
-
-    rv.add(encodeSayString(ast.namedArgs['what']));
-
-    if (!ast.namedArgs['interact'] && !inMenu) {
-      rv.add('nointeract');
-    }
-
-    if (ast.namedArgs['with_'] != null) {
-      rv.add('with');
-      if (ast.namedArgs['with_'] is PythonClassInstance) {
-        rv.add(ast.namedArgs['with_'].namedArgs['value']);
+    if (ast.vars['who'] != null) {
+      if (ast.vars['who'] is PythonClassInstance) {
+        rv.add(ast.vars['who'].vars['value']);
       } else {
-        rv.add(ast.namedArgs['with_']);
+        rv.add(ast.vars['who']);
       }
     }
 
-    if (ast.namedArgs.containsKey('arguments') &&
-        ast.namedArgs['arguments'] != null) {
-      rv.add(reconstructArginfo(ast.namedArgs['arguments']));
+    if (ast.vars.containsKey('attributes') && ast.vars['attributes'] != null) {
+      rv.addAll(List<String>.from(ast.vars['attributes']));
+    }
+
+    if (ast.vars.containsKey('temporary_attributes') &&
+        ast.vars['temporary_attributes'] != null) {
+      rv.add('@');
+      rv.addAll(List<String>.from(ast.vars['temporary_attributes']));
+    }
+
+    rv.add(encodeSayString(ast.vars['what']));
+
+    if (!ast.vars['interact'] && !inMenu) {
+      rv.add('nointeract');
+    }
+
+    if (ast.vars.containsKey('explicit_identifier') &&
+        ast.vars['explicit_identifier'] == true) {
+      rv.add('id');
+      rv.add(ast.vars['identifier']);
+    } else if (ast.vars.containsKey('identifier') &&
+        ast.vars['identifier'] != null) {
+      rv.add('id');
+      rv.add(ast.vars['identifier']);
+    }
+
+    if (ast.vars.containsKey('arguments') && ast.vars['arguments'] != null) {
+      rv.add(reconstructArginfo(ast.vars['arguments']));
+    }
+
+    if (ast.vars['with_'] != null) {
+      rv.add('with');
+      if (ast.vars['with_'] is PythonClassInstance) {
+        rv.add(ast.vars['with_'].vars['value']);
+      } else {
+        rv.add(ast.vars['with_']);
+      }
     }
 
     return rv.join(' ');
@@ -920,17 +821,19 @@ class RPYCDecompiler extends DecompilerBase {
       sayInsideMenu = ast;
       return;
     }
+
     indent();
     write(sayGetCode(ast, inMenu));
   }
 
   void printPython(PythonClassInstance ast, [bool early = false]) {
     indent();
+
     String code;
-    if (ast.namedArgs['code'].namedArgs['source'] is String) {
-      code = ast.namedArgs['code'].namedArgs['source'];
+    if (ast.vars['code'].vars['source'] is String) {
+      code = ast.vars['code'].vars['source'];
     } else {
-      code = ast.namedArgs['code'].namedArgs['source'].namedArgs['value'];
+      code = ast.vars['code'].vars['source'].vars['value'];
     }
 
     if (code[0] == '\n') {
@@ -939,18 +842,19 @@ class RPYCDecompiler extends DecompilerBase {
       if (early) {
         write(' early');
       }
-      if (ast.namedArgs['hide']) {
+      if (ast.vars['hide']) {
         write(' hide');
       }
-      if (ast.namedArgs.containsKey('store') &&
-          ast.namedArgs['store'] != 'store') {
+      if (ast.vars.containsKey('store') &&
+          (ast.vars['store'] ?? 'store') != 'store') {
         write(' in ');
-        write(ast.namedArgs['store'].substring(6));
+        write(ast.vars['store'].substring(6));
       }
       write(':');
 
       increaseIndent(() {
-        writeLines(splitLogicalLines(code));
+        var result = splitLogicalLines(code);
+        writeLines(result);
       });
     } else {
       write('\$ $code');
@@ -960,48 +864,40 @@ class RPYCDecompiler extends DecompilerBase {
   void printDefine(PythonClassInstance ast) {
     requireInit();
     indent();
-    String name;
-    if (ast.klass == PythonClass(module: 'renpy.ast', 'Default')) {
-      name = 'default';
-    } else {
-      name = 'define';
-    }
 
     String priority = '';
-    if (parent?.klass == PythonClass(module: 'renpy.ast', 'Init')) {
+    if (parent != null &&
+        parent!.klass == PythonClass(module: 'renpy.ast', 'Init')) {
       PythonClassInstance init = parent!;
-      if (init.namedArgs['priority'] != initOffset &&
-          init.namedArgs['block'].length == 1 &&
+      if (init.vars['priority'] != initOffset &&
+          init.vars['block'].length == 1 &&
           !shouldComeBefore(init, ast)) {
-        priority = ' ${init.namedArgs['priority'] - initOffset}';
+        priority = ' ${init.vars['priority'] - initOffset}';
       }
     }
+
     String index = '';
-    if (ast.namedArgs.containsKey('index') && ast.namedArgs['index'] != null) {
-      index = ' [${ast.namedArgs['index'].namedArgs['source']}]';
-    }
-    dynamic val = ast.namedArgs['code'].namedArgs['source'];
-
-    if (val is PythonClassInstance &&
-        val.klass == PythonClass(module: 'renpy.ast', 'PyExpr')) {
-      val = val.namedArgs['value'];
+    if (ast.vars.containsKey('index') && ast.vars['index'] != null) {
+      index = '[${ast.vars['index'].vars['source']}]';
     }
 
-    if (!ast.namedArgs.containsKey('store') ||
-        ast.namedArgs['store'] == 'store') {
-      write('$name$priority ${ast.namedArgs['varname']}$index = $val');
+    String operator =
+        ast.vars.containsKey('operator') ? (ast.vars['operator'] ?? '=') : '=';
+    String store = ast.vars.containsKey('store')
+        ? (ast.vars['store'] ?? 'store')
+        : 'store';
+
+    if (store == 'store') {
+      write(
+          'define$priority ${ast.vars['varname']}$index $operator ${ast.vars['code'].vars['source'].vars['value']}');
     } else {
       write(
-          '$name$priority ${ast.namedArgs['store'].substring(6)}.${ast.namedArgs['varname']}$index = $val');
+          'define$priority ${store.substring(6)}.${ast.vars['varname']}$index $operator ${ast.vars['code'].vars['source'].vars['value']}');
     }
   }
 
   void printLex(List lex) {
-    for (List val in lex) {
-      int lineNumber = val[1];
-      String content = val[2];
-      List<dynamic> block = val[3];
-
+    for (var [_, lineNumber, content, block] in lex) {
       advanceToLine(lineNumber);
       indent();
       write(content);
@@ -1015,61 +911,27 @@ class RPYCDecompiler extends DecompilerBase {
 
   void printTranslateBlock(PythonClassInstance ast) {
     indent();
-    write('translate ${ast.namedArgs['language'] ?? 'None'} ');
+    write('translate ${ast.vars['language'] ?? 'None'} ');
 
     skipIndentUntilWrite = true;
 
     bool inInit = this.inInit;
-    if (ast.namedArgs['block'].length == 1 &&
+    if (ast.vars['block'].length == 1 &&
         [
           PythonClass('Python', module: 'renpy.ast'),
           PythonClass('Style', module: 'renpy.ast')
-        ].contains(ast.namedArgs['block'].first.klass)) {
+        ].contains(ast.vars['block'].first.klass)) {
       this.inInit = true;
     }
     try {
-      printNodes(ast.namedArgs['block']);
+      printNodes(ast.vars['block']);
     } finally {
       this.inInit = inInit;
     }
   }
 
-  void dumpFile(dynamic ast,
-      [int indentLevel = 0,
-      bool initOffset = false,
-      bool tagOutsideBlock = false]) {
-    if (ast is List &&
-        ast.length > 1 &&
-        ast.last.klass == PythonClass('Return', module: 'renpy.ast') &&
-        (!ast.last.namedArgs.containsKey('expression') ||
-            ast.last.namedArgs['expression'] == null) &&
-        ast.last.namedArgs['linenumber'] ==
-            ast[ast.length - 2].namedArgs['linenumber']) {
-      /// Investigate those commits to try to find a workaround
-      is356c6e34OrLater = true;
-    }
-
-    this.tagOutsideBlock = tagOutsideBlock;
-
-    if (translator != null) {
-      translator!.translateDialogue(ast);
-    }
-
-    if (initOffset && ast is List) {
-      setBestInitOffset(List<PythonClassInstance>.from(ast));
-    }
-
-    super.dump(ast, indentLevel, 1, true);
-
-    for (var m in blankLineQueue) {
-      m(null);
-    }
-
-    assert(!missingInit);
-  }
-
   bool shouldComeBefore(PythonClassInstance a, PythonClassInstance b) {
-    return a.namedArgs['linenumber'] < b.namedArgs['linenumber'];
+    return a.vars['linenumber'] < b.vars['linenumber'];
   }
 
   void requireInit() {
@@ -1085,18 +947,18 @@ class RPYCDecompiler extends DecompilerBase {
         continue;
       }
 
-      int offset = ast.namedArgs['priority'];
-      if (ast.namedArgs['block'].length == 1 &&
-          !shouldComeBefore(ast, ast.namedArgs['block'].first)) {
-        PythonClassInstance block = ast.namedArgs['block'].first;
+      int offset = ast.vars['priority'];
+      if (ast.vars['block'].length == 1 &&
+          !shouldComeBefore(ast, ast.vars['block'].first)) {
+        PythonClassInstance block = ast.vars['block'].first;
 
         if (block.klass == PythonClass(module: 'renpy.ast', 'Screen')) {
-          offset += 500;
+          offset -= -500;
         } else if (block.klass ==
             PythonClass(module: 'renpy.ast', 'Testcase')) {
           offset -= 500;
         } else if (block.klass == PythonClass(module: 'renpy.ast', 'Image')) {
-          offset -= is356c6e34OrLater ? 500 : 990;
+          offset -= 500;
         }
       }
       votes[offset] = (votes[offset] ?? 0) + 1;
@@ -1174,7 +1036,7 @@ class RPYCDecompiler extends DecompilerBase {
 
   @override
   void printNode(PythonClassInstance ast) {
-    if (ast.namedArgs.containsKey('linenumber') &&
+    if (ast.vars.containsKey('linenumber') &&
         ![
           PythonClass(module: 'renpy.ast', 'TranslateString'),
           PythonClass(module: 'renpy.ast', 'With'),
@@ -1182,32 +1044,31 @@ class RPYCDecompiler extends DecompilerBase {
           PythonClass(module: 'renpy.ast', 'Pass'),
           PythonClass(module: 'renpy.ast', 'Return'),
         ].contains(ast.klass)) {
-      advanceToLine(ast.namedArgs['linenumber']);
-    } else if (ast.namedArgs.containsKey('loc') &&
-        ast.klass != PythonClass(module: 'renpy.ast', 'RawBlock')) {
-      advanceToLine(ast.namedArgs['loc'][1]);
+      advanceToLine(ast.vars['linenumber']);
     }
 
-    dispatch[ast.klass]!(this, ast);
+    (dispatch[ast.klass] ?? printUnknown)(this, ast);
   }
 
   void printAtl(PythonClassInstance ast) {
-    increaseIndent(() {
-      advanceToLine(ast.state!['loc'][1]);
-      if (ast.state!.containsKey('statements') &&
-          ast.state!['statements'] != null) {
-        printNodes(ast.state!['statements']);
-      } else if (ast.state!['loc'] != ['', 0]) {
-        indent();
-        write('pass');
-      }
-    });
+    var out = ATLDecompiler.pprint(
+      outSink,
+      ast,
+      options,
+      indentLevel: indentLevel,
+      lineNumber: lineNumber,
+      skipIndentUntilWrite: skipIndentUntilWrite,
+    );
+
+    lineNumber = out.$1;
+    outSink = out.$2;
+    skipIndentUntilWrite = false;
   }
 
   bool printImspec(List<dynamic> imspec) {
     String begin = '';
     if (imspec[1] != null) {
-      begin = 'expression ${imspec[1].namedArgs['value']}';
+      begin = 'expression ${imspec[1].vars['value']}';
     } else {
       begin = imspec[0].join(' ');
     }
@@ -1228,7 +1089,7 @@ class RPYCDecompiler extends DecompilerBase {
 
     if (imspec[5] != null) {
       if (imspec[5] is PythonClassInstance) {
-        words.append('zorder ${imspec[5].namedArgs['value']}');
+        words.append('zorder ${imspec[5].vars['value']}');
       } else {
         words.append('zorder ${imspec[5]}');
       }
@@ -1241,11 +1102,12 @@ class RPYCDecompiler extends DecompilerBase {
         if (rawPosition is String) {
           positions.add(rawPosition);
         } else if (rawPosition is PythonClassInstance) {
-          positions.add(rawPosition.namedArgs['value']);
+          positions.add(rawPosition.vars['value']);
         } else {
-          throw Exception('Unknown position type');
+          positions.add(rawPosition.toString());
         }
       }
+
       words.append('at ${positions.join(', ')}');
     }
 
@@ -1254,22 +1116,20 @@ class RPYCDecompiler extends DecompilerBase {
   }
 
   bool sayBelongsToMenu(PythonClassInstance say, PythonClassInstance menu) {
-    return ((!say.namedArgs.containsKey('interact') ||
-            !say.namedArgs['interact']) &&
-        (say.namedArgs.containsKey('who') &&
-            say.namedArgs['who'] != null &&
-            say.namedArgs['who'].isNotEmpty) &&
-        (!say.namedArgs.containsKey('with_') ||
-            say.namedArgs['with_'] != null) &&
-        (!say.namedArgs.containsKey('attributes') ||
-            say.namedArgs['attributes'] == null) &&
+    return ((!say.vars.containsKey('interact') ||
+            say.vars['interact'] == false) &&
+        (say.vars.containsKey('who') && say.vars['who'] != null) &&
+        (!say.vars.containsKey('with_') || say.vars['with_'] == null) &&
+        (!say.vars.containsKey('attributes') ||
+            say.vars['attributes'] == null) &&
         (menu.klass == PythonClass('Menu', module: 'renpy.ast')) &&
-        (menu.namedArgs['items'][0][2] != null) &&
+        (menu.vars['items'][0][2] != null) &&
         (!shouldComeBefore(say, menu)));
   }
 
   void printSayInsideMenu() {
-    dispatch[PythonClass(module: 'renpy.ast', 'Say')]!(this, sayInsideMenu!);
+    printSay(sayInsideMenu!, true);
+    sayInsideMenu = null;
   }
 
   void printMenuItem(String label, dynamic condition,
@@ -1282,7 +1142,13 @@ class RPYCDecompiler extends DecompilerBase {
     }
 
     if (block != null) {
-      if (condition is String && condition != 'True') {
+      if (condition is PythonClassInstance &&
+          condition.klass == PythonClass('PyExpr', module: 'renpy.ast') &&
+          condition.vars['value'] != 'True') {
+        condition = condition.vars['value'];
+      }
+
+      if (condition != 'True') {
         write(' if $condition');
       }
 
