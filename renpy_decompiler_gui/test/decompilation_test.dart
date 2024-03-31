@@ -85,11 +85,10 @@ void main() {
           data = zlib.decode(data);
 
           try {
-            List<dynamic> compiled = loads(
-              Uint8List.fromList(data),
-              recognizedDescriptors: descriptors,
-              swappers: swappers,
-            );
+            List<dynamic> compiled = loads(Uint8List.fromList(data),
+                recognizedDescriptors: descriptors,
+                swappers: swappers,
+                silent: false);
 
             parseFile(compiled);
           } on UnimplementedError {

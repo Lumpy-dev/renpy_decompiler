@@ -34,6 +34,8 @@ class Unpickler {
 
   List<PythonClassSwapper> swappers;
 
+  bool silent;
+
   Unpickler({
     required this.file,
     this.encoding = 'ascii',
@@ -41,6 +43,7 @@ class Unpickler {
     List<dynamic>? buffers,
     this.recognizedDescriptors = const [],
     this.swappers = const [],
+    this.silent = true,
   }) : buffers = (buffers?.isEmpty ?? true) ? null : buffers!.iterator {
     RawFrame rawFrame = RawFrame(data: file);
     _fileReadline = rawFrame.readline;
@@ -101,15 +104,17 @@ dynamic loads(
   List<dynamic>? buffers,
   List<PythonClassDescriptor> recognizedDescriptors = const [],
   List<PythonClassSwapper> swappers = const [],
+  bool silent = true,
 }) {
   return Unpickler(
-    file: file,
-    encoding: encoding,
-    errors: errors,
-    buffers: buffers,
-    recognizedDescriptors: recognizedDescriptors + internalDescriptors,
-    swappers: swappers + internalSwappers,
-  ).load();
+          file: file,
+          encoding: encoding,
+          errors: errors,
+          buffers: buffers,
+          recognizedDescriptors: recognizedDescriptors + internalDescriptors,
+          swappers: swappers + internalSwappers,
+          silent: silent)
+      .load();
 }
 
 Future<int> dis(List<int> data,

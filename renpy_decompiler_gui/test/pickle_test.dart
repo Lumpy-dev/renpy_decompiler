@@ -77,8 +77,9 @@ void main() {
           }
 
           print('Running Dart');
-          Map<dynamic, dynamic> outIndex =
-              loads(Uint8List.fromList(indexAndVersion.decompressedIndex));
+          Map<dynamic, dynamic> outIndex = loads(
+              Uint8List.fromList(indexAndVersion.decompressedIndex),
+              silent: false);
           print('Dart load finished');
 
           print('Writing Dart output to file');

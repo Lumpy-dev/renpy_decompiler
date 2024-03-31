@@ -20,8 +20,9 @@ void main(List<String> args) async {
 Future<void> loadFlutter() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  isMPVInstalled =
-      Platform.isLinux ? Process.runSync('which', ['mpv']).exitCode == 0 : null;
+  isMPVInstalled = Platform.isLinux
+      ? Process.runSync('mpv', ['--version']).exitCode != 127
+      : null;
 
   runApp(const App());
 }
