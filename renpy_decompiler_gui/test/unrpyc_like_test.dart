@@ -9,25 +9,29 @@ import 'package:pickle_decompiler/pickle_decompiler.dart';
 import 'package:renpy_decompiler_backend/rpyc_parser.dart';
 
 void main() {
+  List<FileSystemEntity> filesToTest = [];
+
+  String unrpycPath =
+      const String.fromEnvironment('UNRPYC_PATH', defaultValue: 'test/unrpyc');
+
+  Directory unrpycHome = Directory(unrpycPath);
+
+  Directory testFilesDir =
+      Directory(join(unrpycHome.absolute.path, 'testcases'));
+
+  Directory compiledFilesDir =
+      Directory(join(testFilesDir.absolute.path, 'compiled'));
+  Directory expectedFilesDir =
+      Directory(join(testFilesDir.absolute.path, 'expected'));
+
+  filesToTest = compiledFilesDir
+      .listSync(recursive: true)
+      .where((element) => element is File && extension(element.path) == '.rpyc')
+      .toList();
+
   group('Decompile files', () {
-    test('Find RPYC', () {
-      // String unrpycPath = const String.fromEnvironment('UNRPYC_PATH',
-      //     defaultValue: 'test/unrpyc');
-      // print(unrpycPath);
-      String unrpycPath =
-          '/home/theskyblockman/Developement/reverse-engineer/test/unrpyc';
-
-      Directory unrpycHome = Directory(unrpycPath);
-
-      Directory testFilesDir =
-          Directory(join(unrpycHome.absolute.path, 'testcases'));
-
-      Directory compiledFilesDir =
-          Directory(join(testFilesDir.absolute.path, 'compiled'));
-      Directory expectedFilesDir =
-          Directory(join(testFilesDir.absolute.path, 'expected'));
-
-      for (var file in compiledFilesDir.listSync(recursive: true)) {
+    for (var file in filesToTest) {
+      test('Test ${basename(file.path)}', () {
         if (file is File && extension(file.path) == '.rpyc') {
           print('Testing ${file.path}');
           List<int> fileBytes = file.readAsBytesSync();
@@ -84,7 +88,7 @@ void main() {
             fileContent.substring(0, fileContent.length - 68).trim(),
           );
         }
-      }
-    });
+      });
+    }
   });
 }

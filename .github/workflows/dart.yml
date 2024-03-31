@@ -23,7 +23,9 @@ jobs:
     
     - run: flutter pub get
       working-directory: "renpy_decompiler_gui/"
-    - run: flutter test -r github
+    - run: git clone https://github.com/CensoredUsername/unrpyc.git
+      working-directory: "../"
+    - run: flutter test -r github --dart-define=UNRPYC_PATH="../../unrpyc/"
       working-directory: "renpy_decompiler_gui/"
       continue-on-error: true
     - run: dart analyze --fatal-infos

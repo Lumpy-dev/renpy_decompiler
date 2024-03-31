@@ -377,9 +377,20 @@ String reconstructParaminfo(PythonClassInstance? paraminfo) {
   } else {
     int state = 1;
 
-    Iterable<dynamic> values = paraminfo.vars['parameters'] is Map
-        ? paraminfo.vars['parameters'].values
-        : [for (var parameter in paraminfo.vars['parameters']) parameter.value];
+    var parameters = paraminfo.vars['parameters'];
+
+    Iterable<dynamic> values = parameters is Map
+        ? parameters.values
+        : (parameters is DefaultDict
+            ? [
+                if (parameters.vars.containsKey('items'))
+                  for (int i = 1; i < parameters.vars['items'].length; i += 2)
+                    parameters.vars['items'][i]
+              ]
+            : [
+                for (var parameter in paraminfo.vars['parameters'])
+                  parameter.value
+              ]);
 
     for (var parameter in values) {
       rv.add(sep.call());
