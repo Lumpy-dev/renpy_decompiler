@@ -1,3 +1,22 @@
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+//
+// The license of codegen.py is included in the file itself.
 import 'package:pickle_decompiler/pickle_decompiler.dart';
 
 typedef BlankLineCallback = bool Function(int? lineNumber);
@@ -12,9 +31,17 @@ typedef BaseDecompilerState = ({
   List<BlankLineCallback> blankLineQueue
 });
 
-class DecompilerBase {
-  List<String> outSink;
+class OptionBase {
   String indentation;
+
+  /// TODO: Find the type for [printLock]
+  dynamic printLock;
+
+  OptionBase({this.indentation = '    ', this.printLock});
+}
+
+class DecompilerBase<O extends OptionBase> {
+  List<String> outSink;
   bool skipIndentUntilWrite = false;
 
   int lineNumber = 0;
@@ -25,7 +52,9 @@ class DecompilerBase {
 
   int indentLevel = 0;
 
-  DecompilerBase({this.outSink = const [], this.indentation = '    '});
+  O options;
+
+  DecompilerBase({this.outSink = const [], required this.options});
 
   /// Write the decompiled representation of `ast` into the opened file given in the
   /// constructor
@@ -52,8 +81,9 @@ class DecompilerBase {
     }
   }
 
-  /// Shorthand method for writing `string` to the file
-  void write(String string) {
+  /// Shorthand method for writing [string] to the file
+  void write(dynamic string) {
+    string = string.toString();
     lineNumber += '\n'.allMatches(string).length;
     skipIndentUntilWrite = false;
     if (string.contains('renpy.ast.PyExpr')) {
@@ -126,7 +156,7 @@ class DecompilerBase {
   /// something calls the write method
   void indent() {
     if (!skipIndentUntilWrite) {
-      write('\n${indentation * indentLevel}');
+      write('\n${options.indentation * indentLevel}');
     }
   }
 
@@ -169,7 +199,7 @@ class DecompilerBase {
     write('pass # <<<COULD NOT DECOMPILE: $message>>>');
   }
 
-  void printUnknownNode(PythonClassInstance ast) {
+  void printUnknown(PythonClassInstance ast) {
     writeFailure('Unknown AST node: ${ast.klass}');
   }
 
@@ -186,14 +216,18 @@ class WordConcatenator {
   WordConcatenator(this.needsSpace, [this.reorderable = false]);
 
   void append(String word) {
-    words.add(word);
+    if (word.isNotEmpty) {
+      words.add(word);
+    }
   }
 
   String join() {
     if (words.isEmpty) {
       return '';
     }
-    if (reorderable && words.last[words.last.length - 1] == ' ') {
+    if (reorderable &&
+        words.last.isNotEmpty &&
+        words.last[words.last.length - 1] == ' ') {
       for (int i = words.length - 1; i >= 0; i--) {
         if (words[i][words[i].length - 1] != ' ') {
           words.add(words.removeLast());
@@ -204,7 +238,10 @@ class WordConcatenator {
     String lastWord = words.last;
     words = [
       for (String x in words.sublist(0, words.length - 1))
-        if (x[x.length - 1] == ' ') x.substring(0, x.length - 1) else x
+        if (x.isNotEmpty && x[x.length - 1] == ' ')
+          x.substring(0, x.length - 1)
+        else
+          x
     ];
     words.add(lastWord);
     String rv = (needsSpace ? ' ' : '') + words.join(' ');
@@ -231,53 +268,174 @@ class First<T> {
 }
 
 String reconstructParaminfo(PythonClassInstance? paraminfo) {
-  if (paraminfo == null || (paraminfo.state ?? {}).isEmpty) {
+  if (paraminfo == null || paraminfo.vars.isEmpty) {
     return '';
   }
 
   List<String> rv = ['('];
 
   First sep = First<String>(yesValue: '', noValue: ', ');
-  List<dynamic> positional = [
-    for (var i in paraminfo.state!['parameters'])
-      if (paraminfo.state!['positional'].contains(i[0])) i
-  ];
-  List<dynamic> nameOnly = [
-    for (var i in paraminfo.state!['parameters'])
-      if (!positional.contains(i)) i
-  ];
 
-  for (var parameter in positional) {
-    rv.add(sep.call());
-    rv.add(parameter[0]);
-    if (parameter[1] != null) {
-      rv.add('=${paraminfo.state!['extrapos']}');
+  if (paraminfo.vars.containsKey('positional_only')) {
+    Set<String> alreadyAccounted = {
+      for (var (name, _) in paraminfo.vars['positional_only']) name,
+      for (var (name, _) in paraminfo.vars['keyword_only']) name
+    };
+    List<({String name, String? defaultVal})> other = [
+      for (var [name, defaultVal] in paraminfo.vars['parameters'])
+        if (!alreadyAccounted.contains(name))
+          (name: name, defaultVal: defaultVal)
+    ];
+
+    for (var [name, defaultVal] in paraminfo.vars['positional_only']) {
+      rv.add(sep.call());
+      rv.add(name);
+      if (defaultVal != null) {
+        rv.add('=');
+        rv.add(defaultVal);
+      }
     }
-  }
-  if (paraminfo.state!.containsKey('extrapos') &&
-      paraminfo.state!['extrapos'] != null) {
-    rv.add(sep.call());
-    rv.add('*${paraminfo.state!['extrapos']}');
-  }
-  if (nameOnly.isNotEmpty) {
-    if (!paraminfo.state!.containsKey('extrapos') ||
-        paraminfo.state!['extrapos'] == null) {
+
+    if (paraminfo.vars['positional_only']?.isNotEmpty ?? false) {
+      rv.add(sep.call());
+      rv.add('/');
+    }
+
+    for (var (name: name, defaultVal: defaultVal) in other) {
+      rv.add(sep.call());
+      rv.add(name);
+      if (defaultVal != null) {
+        rv.add('=');
+        rv.add(defaultVal);
+      }
+    }
+
+    if (paraminfo.vars['extrapos'] != null) {
+      rv.add(sep.call());
+      rv.add('*');
+      rv.add(paraminfo.vars['extrapos']);
+    } else if (paraminfo.vars['keyword_only'].isNotEmpty) {
       rv.add(sep.call());
       rv.add('*');
     }
-    for (var parameter in nameOnly) {
+
+    for (var (name, defaultVal) in paraminfo.vars['keyword_only']) {
+      rv.add(sep.call());
+      rv.add(name);
+      if (defaultVal != null) {
+        rv.add('=');
+        rv.add(defaultVal);
+      }
+    }
+
+    if (paraminfo.vars['extrakw'] != null) {
+      rv.add(sep.call());
+      rv.add('**');
+      rv.add(paraminfo.vars['extrakw']);
+    }
+  } else if (paraminfo.vars.containsKey('extrapos')) {
+    List<dynamic> positional = [
+      for (var param in paraminfo.vars['parameters'])
+        if (paraminfo.vars['positional'].contains(param[0])) param
+    ];
+    List<dynamic> nameonly = [
+      for (var param in paraminfo.vars['parameters'])
+        if (!positional.contains(param)) param
+    ];
+    for (var parameter in positional) {
       rv.add(sep.call());
       rv.add(parameter[0]);
       if (parameter[1] != null) {
-        rv.add('=${parameter[1]}');
+        rv.add('=');
+        rv.add(parameter[1].vars['value']);
+      }
+    }
+    if (paraminfo.vars['extrapos'] != null) {
+      rv.add(sep.call());
+      rv.add('*');
+      rv.add(paraminfo.vars['extrapos']);
+    }
+    if (nameonly.isNotEmpty) {
+      if (!paraminfo.vars['extrapos']) {
+        rv.add(sep.call());
+        rv.add('*');
+      }
+      for (var parameter in nameonly) {
+        rv.add(sep.call());
+        rv.add(parameter[0]);
+        if (parameter[1] != null) {
+          rv.add('=');
+          rv.add(parameter[1]);
+        }
+      }
+    }
+    if (paraminfo.vars['extrakw'] != null) {
+      rv.add(sep.call());
+      rv.add('**');
+      rv.add(paraminfo.vars['extrakw']);
+    }
+  } else {
+    int state = 1;
+
+    var parameters = paraminfo.vars['parameters'];
+
+    Iterable<dynamic> values = parameters is Map
+        ? parameters.values
+        : (parameters is DefaultDict
+            ? [
+                if (parameters.vars.containsKey('items'))
+                  for (int i = 1; i < parameters.vars['items'].length; i += 2)
+                    parameters.vars['items'][i]
+              ]
+            : [
+                for (var parameter in paraminfo.vars['parameters'])
+                  parameter.value
+              ]);
+
+    for (var parameter in values) {
+      rv.add(sep.call());
+      if (parameter.vars['kind'] == 0) {
+        state = 0;
+
+        rv.add(parameter.vars['name']);
+        if (parameter.vars['default'] != null) {
+          rv.add('=');
+          rv.add(parameter.vars['default']);
+        }
+      } else {
+        if (state == 0) {
+          state = 1;
+          rv.add('/');
+          rv.add(sep.call());
+        }
+
+        if (parameter.vars['kind'] == 1) {
+          rv.add(parameter.vars['name']);
+          if (parameter.vars['default'] != null) {
+            rv.add('=');
+            rv.add(parameter.vars['default']);
+          }
+        } else if (parameter.vars['kind'] == 2) {
+          state = 2;
+          rv.add('*');
+          rv.add(parameter.vars['name']);
+        } else if (parameter.vars['kind'] == 3) {
+          if (state == 1) {
+            state = 2;
+            rv.add('*');
+            rv.add(sep.call());
+          }
+
+          rv.add(parameter.vars['name']);
+          if (parameter.vars['default'] != null) {
+            rv.add('=');
+            rv.add(parameter.vars['default']);
+          }
+        }
       }
     }
   }
-  if (paraminfo.state!.containsKey('extrakw') &&
-      paraminfo.state!['extrakw'] != null) {
-    rv.add(sep.call());
-    rv.add('**${paraminfo.state!['extrakw']}');
-  }
+
   rv.add(')');
 
   return rv.join();
@@ -293,9 +451,8 @@ String reconstructArginfo(PythonClassInstance? arginfo) {
   First sep = First<String>(yesValue: '', noValue: ', ');
 
   List arguments;
-  if ((arginfo.state ?? {}).containsKey('named_args') &&
-      arginfo.namedArgs.containsKey('arguments')) {
-    arguments = arginfo.namedArgs['arguments'];
+  if (arginfo.vars.containsKey('arguments')) {
+    arguments = arginfo.vars['arguments'];
   } else {
     arguments = [];
   }
@@ -308,17 +465,21 @@ String reconstructArginfo(PythonClassInstance? arginfo) {
     if (name != null) {
       rv.add('$name=');
     }
+
+    if (val is PythonClassInstance) {
+      val = val.vars['value'];
+    }
+
     rv.add(val);
   }
-  if (arginfo.namedArgs.containsKey('extrapos') &&
-      arginfo.namedArgs['extrapos'] != null) {
+  if (arginfo.vars.containsKey('extrapos') &&
+      arginfo.vars['extrapos'] != null) {
     rv.add(sep.call());
-    rv.add('*${arginfo.namedArgs['extrapos']}');
+    rv.add('*${arginfo.vars['extrapos']}');
   }
-  if (arginfo.namedArgs.containsKey('extrakw') &&
-      arginfo.namedArgs['extrakw'] != null) {
+  if (arginfo.vars.containsKey('extrakw') && arginfo.vars['extrakw'] != null) {
     rv.add(sep.call());
-    rv.add('**${arginfo.namedArgs['extrakw']}');
+    rv.add('**${arginfo.vars['extrakw']}');
   }
 
   rv.add(')');
@@ -359,19 +520,18 @@ final keywords = {
 
 class Lexer {
   int pos = 0;
-  late int length;
+  final int length;
   String string;
 
-  Lexer(this.string) {
-    length = string.length;
-  }
+  Lexer(this.string) : length = string.length;
 
-  String? re(RegExp reexp) {
+  Match? re(RegExp reexp) {
     if (length == pos) {
       return null;
     }
 
-    reexp = RegExp(reexp.pattern, dotAll: true);
+    reexp = RegExp(reexp.pattern,
+        multiLine: false, caseSensitive: false, dotAll: true, unicode: true);
 
     Match? match = reexp.matchAsPrefix(string, pos);
     if (match == null) {
@@ -379,7 +539,7 @@ class Lexer {
     }
 
     pos = match.end;
-    return match.group(0);
+    return match;
   }
 
   bool eol() {
@@ -387,27 +547,63 @@ class Lexer {
     return pos >= length;
   }
 
-  String? match(RegExp reexp) {
+  void skipWhitespace() {
     re(RegExp(r'(\s+|\\\n)+'));
+  }
+
+  Match? match(RegExp reexp, [bool clearWhitespace = true]) {
+    if (clearWhitespace) {
+      skipWhitespace();
+    }
     return re(reexp);
   }
 
   String? pythonString([bool clearWhitespace = true]) {
-    final regex = RegExp(
-      r'u?' // optional unicode prefix (u)
-      r'(?<a>' // capture beginning quote
-      r'"("")?|' // double quotes
-      r"'('')?" // or single quotes
-      r')' // end quote capture
-      r'.*?' // any string content
-      r'(?<=[^\ ])(\\)*' // ensure end quote is not escaped
-      r'\k<a>', // double or single quote, matching beginning
-      multiLine: true,
-    );
-    if (clearWhitespace) {
-      return match(regex);
-    } else {
-      return re(regex);
+    int oldPos = pos;
+
+    if (eol()) {
+      return null;
+    }
+
+    RegExp exp = RegExp(r'[urfURF]*("""|'
+        r"'''|"
+        r'"|'
+        r"')");
+
+    var start = match(exp, clearWhitespace);
+
+    if (start == null) {
+      pos = oldPos;
+
+      return null;
+    }
+
+    var delim = start.group(1)!;
+
+    final sb = StringBuffer(start.group(0)!);
+
+    while (true) {
+      if (eol()) {
+        throw Exception('End of line reached while parsing string.');
+      }
+
+      if (match(RegExp(delim), clearWhitespace) != null) {
+        sb.write(delim);
+        return sb.toString();
+      }
+
+      if (match(RegExp(r'\\'), clearWhitespace) != null) {
+        pos++;
+        continue;
+      }
+
+      final contentMatch = re(RegExp(r".[^'"
+          r'"\\]*'));
+      if (contentMatch != null) {
+        sb.write(contentMatch.group(0));
+      } else {
+        throw Exception('Unexpected character in Python string.');
+      }
     }
   }
 
@@ -442,11 +638,12 @@ class Lexer {
   }
 
   String? number() {
-    return match(RegExp(r'([+\-])?(\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'));
+    return match(RegExp(r'([+\-])?(\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?'))
+        ?.group(0);
   }
 
   String? word() {
-    return match(wordRegexp)!;
+    return match(wordRegexp)?.group(0);
   }
 
   String? name() {
@@ -468,7 +665,7 @@ class Lexer {
 
     if (!(pythonString() != null ||
         number() != null ||
-        (container() ?? false) ||
+        container() != null ||
         name() != null)) {
       return false;
     }
@@ -517,7 +714,7 @@ class Lexer {
         continue;
       }
 
-      if ({')', ']', '}'}.contains(c) && contained > 0) {
+      if ({')', ']', '}'}.contains(c) && contained != 0) {
         contained--;
         pos++;
         continue;
@@ -528,7 +725,7 @@ class Lexer {
         continue;
       }
 
-      if (pythonString(false) != null) {
+      if ((pythonString(false) ?? '').isNotEmpty) {
         continue;
       }
 
@@ -540,4 +737,12 @@ class Lexer {
     }
     return lines;
   }
+}
+
+String ltrim(String x, String characters) {
+  var start = 0;
+  while (characters.contains(x[start])) {
+    start += 1;
+  }
+  return x.substring(start);
 }

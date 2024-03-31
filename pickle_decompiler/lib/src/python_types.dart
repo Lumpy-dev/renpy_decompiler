@@ -1,3 +1,7 @@
+// Copyright © 2024, Lumpy and the project contributors.
+// The content of this file is the property of the creator of this Software
+import 'package:pickle_decompiler/src/bridges/collections.dart';
+
 class PythonClass {
   String? module;
   String name;
@@ -30,8 +34,8 @@ class PythonClassInstance {
 
   PythonClassInstance(this.klass);
 
-  Map<String, dynamic> get namedArgs =>
-      Map<String, dynamic>.from(state?['named_args'] ?? {});
+  Map<String, dynamic> get vars => Map<String, dynamic>.from(
+      state?['named_args'] ?? state?['unknown'] ?? state ?? {});
 
   void setState(dynamic state) {
     if (klass.descriptor != null) {
@@ -138,9 +142,7 @@ class PythonClassInstance {
           }
         }
       } else if (state is Map) {
-        if (!state.containsKey('arguments')) {
-          this.state = Map<String, dynamic>.from(state);
-        }
+        this.state!['unknown'] = Map<String, dynamic>.from(state);
       } else {
         throw Exception(
             'Unknown state type: ${state.runtimeType}, state is $state');
@@ -158,6 +160,36 @@ class PythonClassInstance {
     state!['named_args'] ??= {};
     state!['named_args'][key] = value;
   }
+
+  @override
+  noSuchMethod(Invocation invocation) {
+    if (invocation.isMethod) {
+      return super.noSuchMethod(invocation);
+    }
+
+    if (invocation.isGetter) {
+      if (state == null) {
+        return null;
+      }
+
+      print(invocation.memberName);
+      return vars[invocation.memberName.toString()];
+    }
+
+    if (invocation.isSetter) {
+      state ??= {'named_args': {}};
+      state!['named_args'] ??= {};
+
+      state!['named_args'][invocation.memberName.toString()] =
+          invocation.positionalArguments.first;
+    }
+  }
+
+  PythonClassInstance copyWith(
+      {PythonClass? klass, Map<String, dynamic>? state}) {
+    return PythonClassInstance(klass ?? this.klass)
+      ..state = state ?? this.state;
+  }
 }
 
 /// [possibleTypes] should be List<Type> or List<String> or a combination of both
@@ -172,6 +204,10 @@ abstract class PythonClassDescriptor {
   PythonClass get klass;
 
   List<({String attributeName, PythonSlotType? type})> get describeState;
+
+  dynamic construct(List<dynamic> args) {
+    return null;
+  }
 }
 
 /// Some Python objects may not be replaced by native Dart objects because the object is an expansion of this
@@ -182,3 +218,15 @@ abstract class PythonClassSwapper {
 
   dynamic getReplacementOnInit(List<dynamic> args);
 }
+
+/// Swappers used to implement some classes which are considered builtins by the Python pickle.
+///
+/// You do not need to add those to your swappers, we already do that.
+final List<PythonClassSwapper> internalSwappers = [];
+
+/// Descriptors used to implement some classes which are considered builtins by the Python pickle.
+///
+/// You do not need to add those to your descriptors, we already do that.
+final List<PythonClassDescriptor> internalDescriptors = [
+  DefaultDictDescriptor()
+];

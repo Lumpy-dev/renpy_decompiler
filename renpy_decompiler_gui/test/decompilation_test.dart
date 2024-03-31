@@ -5,10 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart';
 import 'package:pickle_decompiler/pickle_decompiler.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/ast.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/python.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/revertable.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/sl2/slast.dart';
 import 'package:renpy_decompiler_backend/rpyc_parser.dart';
 import 'package:renpy_decompiler_backend/tree_creator.dart';
 
@@ -23,7 +19,7 @@ void main() {
   group('Dart rpyc decryption', () {
     Directory rpaDir = Directory('test/rpa');
 
-    if(!rpaDir.existsSync()) {
+    if (!rpaDir.existsSync()) {
       print('RPA directory not found, skipping tests');
       return;
     }
@@ -89,16 +85,11 @@ void main() {
           data = zlib.decode(data);
 
           try {
-            List<dynamic> compiled = Unpickler(
-                file: Uint8List.fromList(data),
-                recognizedDescriptors: [
-                  ...astDescriptors,
-                  ...slastDescriptors
-                ],
-                recognizedSwappers: [
-                  ...revertableSwappers,
-                  ...pythonSwappers
-                ]).load();
+            List<dynamic> compiled = loads(
+              Uint8List.fromList(data),
+              recognizedDescriptors: descriptors,
+              swappers: swappers,
+            );
 
             parseFile(compiled);
           } on UnimplementedError {
