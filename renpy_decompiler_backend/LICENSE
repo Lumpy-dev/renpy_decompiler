@@ -12,7 +12,7 @@ This copy of the Software contains ported code from the following other pieces o
 
 A header can be found at the top or throughout each file containing the relevant ported code with their license.
 
-Files contained in the "versions" folder under the "lib" folder at the root of the "backend" module of this software's source code are ported code from many different other projects when stated, a link can be found at throughout each file to their original creator's or creators' source code.
+Files contained in the "versions" folder under the "lib" folder at the root of the "backend" module of this software's source code contain ported code from many other projects, a link can be found throughout each file to their original creator's or creators' source code, unless the file is part of UnRPA.
 
 ---
 

@@ -24,9 +24,9 @@ git clone https://github.com/<username>/renpy_decompiler.git
 We use IntelliJ IDEA to develop the project, we already have run configurations for the project for this IDE.
 You can use VSCode or other IDEs, but you'll have to create your own run configurations.
 
-On IntelliJ, just select the adequate run configuration and run it. (i.e. Use "Run GUI" to run the GUI)
+On IntelliJ, select the adequate run configuration and run it. (i.e. Use "Run GUI" to run the GUI)
 
-There are 3 modules in the project:
+There are three modules in the project:
 - `renpy_decompiler_gui`: A Flutter app that provides a GUI for all the backend
 - `renpy_decompiler_backend`: A simple Dart package and a Command Line Application to decompile Ren'Py files
 - `pickle_decompiler`: A Dart port of the Python pickle decompiler
