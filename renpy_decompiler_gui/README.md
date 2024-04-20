@@ -23,7 +23,7 @@ If you see a popup saying to install MPV, please follow the instructions below :
 - [ ] iOS
 - [ ] Web
 
-If your platform is not supported, it may still work but isn't tested and thus a good experience cannot be guaranteed.
+If your platform is not supported, it may still work but isn't tested. Good experience isn't guaranteed.
 
 ## Feature list/Roadmap
 - [x] Extracting files
@@ -34,4 +34,4 @@ If your platform is not supported, it may still work but isn't tested and thus a
   - [x] Fonts
   - [ ] Video
   - [x] RPYC
-- [ ] Merging RPAs to a single tree
+- [x] Merging RPAs to a single tree
