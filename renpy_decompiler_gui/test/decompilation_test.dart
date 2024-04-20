@@ -33,19 +33,19 @@ void main() {
           () async {
         var createdTree = await createTree(archive);
 
-        List<RPATreeNodeFile> files = listFiles(createdTree, []);
+        List<TreeNodeFile> files = listFiles(createdTree, []);
 
         int attemptedFilesAmount = 0;
         int decompiledFilesAmount = 0;
 
-        for (RPATreeNodeFile file in files) {
+        for (TreeNodeFile file in files) {
           if (extension(file.path) != '.rpyc') continue;
 
           attemptedFilesAmount++;
 
           StreamController<List<int>> controller = StreamController();
 
-          file.version.postProcess(file, controller.sink);
+          file.postProcess(controller.sink);
           controller.sink.close();
 
           List<int> data = (await controller.stream.toList())

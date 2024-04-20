@@ -12,7 +12,22 @@ Future<int> exportTree(TreeNode tree, Directory output,
     int currentFileAmount = 0,
     int? totalFileAmount,
     Sink<({int amount, int max})>? sink]) async {
-  if (tree is RPATreeNodeDirectory) {
+  if (tree is TreeNodeFile) {
+    File fileToExportTo = File(join(output.path, currentPath, tree.path));
+
+    if ((overwrite || !(await fileToExportTo.exists())) &&
+        (filter == null || filter.matches(fileToExportTo.path))) {
+      await fileToExportTo.create(recursive: true);
+      await exportFile(tree, fileToExportTo);
+
+      totalFileAmount ??= 0;
+      currentFileAmount++;
+
+      if (sink != null) {
+        sink.add((amount: currentFileAmount, max: totalFileAmount));
+      }
+    }
+  } else {
     // Would be unfortunate...
     if (tree.path == '/') {
       tree.path = '';
@@ -33,30 +48,15 @@ Future<int> exportTree(TreeNode tree, Directory output,
           totalFileAmount,
           sink);
     }
-  } else if (tree is RPATreeNodeFile) {
-    File fileToExportTo = File(join(output.path, currentPath, tree.path));
-
-    if ((overwrite || !(await fileToExportTo.exists())) &&
-        (filter == null || filter.matches(fileToExportTo.path))) {
-      await fileToExportTo.create(recursive: true);
-      await exportFile(tree, fileToExportTo);
-
-      totalFileAmount ??= 0;
-      currentFileAmount++;
-
-      if (sink != null) {
-        sink.add((amount: currentFileAmount, max: totalFileAmount));
-      }
-    }
   }
 
   return currentFileAmount;
 }
 
-Future<void> exportFile(RPATreeNodeFile file, File output) async {
+Future<void> exportFile(TreeNodeFile file, File output) async {
   IOSink sink = output.openWrite();
 
-  file.version.postProcess(file, sink);
+  file.postProcess(sink);
   await sink.flush();
   await sink.close();
 }

@@ -269,7 +269,7 @@ class _MainPageState extends State<MainPage> {
       }
     }
 
-    if (current is RPATreeNodeFile) {
+    if (current is TreeNodeFile) {
       return amount + 1;
     }
 
@@ -347,8 +347,9 @@ class _MainPageState extends State<MainPage> {
             builder: (BuildContext context) {
               return AlertDialog(
                 title: const Text('Information'),
-                content: Text(
-                    'Name: ${currentFileNode!.name}\nSize: ${(currentFileNode!.size / 1000000).toStringAsFixed(2)} MB\nVersion: ${version?.version ?? 'Not an archive'}'),
+                content: Text('Name: ${currentFileNode!.name}\n'
+                    'Size: ${(currentFileNode!.size / 1000000).toStringAsFixed(2)} MB\n'
+                    'Version: ${version?.version ?? 'Not an archive'}'),
                 actions: [
                   TextButton(
                       onPressed: () {
@@ -392,7 +393,7 @@ class _MainPageState extends State<MainPage> {
               title: Text(tree == null
                   ? 'Location is being opened...'
                   : (selectedFiles != null
-                      ? '$selectedFileAmount file${selectedFileAmount == 1 ? '' : 's'} selected'
+                      ? '$selectedFileAmount location${selectedFileAmount == 1 ? '' : 's'} selected'
                       : '${p.basename(tree!.path)}${version != null ? ', ${version!.version}' : ''}')),
               actions: tree == null
                   ? []
@@ -402,7 +403,8 @@ class _MainPageState extends State<MainPage> {
                         child: (!Platform.isAndroid &&
                                     !Platform.isIOS &&
                                     !kDebugMode) ||
-                                selectedFiles == null
+                                selectedFiles == null ||
+                                currentFileNode == null
                             ? Container()
                             : infoButton,
                       ),
@@ -473,7 +475,9 @@ class _MainPageState extends State<MainPage> {
                 selectedFiles = selected;
               }),
               onNodeSelected: (node) {
-                currentFileNode = node;
+                setState(() {
+                  currentFileNode = node;
+                });
               },
               setSelected: setSelected,
               selectedFiles: selectedFiles,

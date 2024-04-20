@@ -111,6 +111,10 @@ abstract class TreeNodeFile extends TreeNode {
   List<int> read1() {
     return read(1);
   }
+
+  void postProcess(Sink<List<int>> sink) {
+    sink.add(read(-1));
+  }
 }
 
 int countFiles(TreeNode node, int amount) {
@@ -118,19 +122,19 @@ int countFiles(TreeNode node, int amount) {
     amount = countFiles(child, amount);
   }
 
-  if (node is RPATreeNodeFile) {
+  if (node is TreeNodeFile) {
     return amount + 1;
   }
 
   return amount;
 }
 
-List<RPATreeNodeFile> listFiles(TreeNode node, List<RPATreeNodeFile> files) {
+List<TreeNodeFile> listFiles(TreeNode node, List<TreeNodeFile> files) {
   for (var child in node.childNodes) {
     files = listFiles(child, files);
   }
 
-  if (node is RPATreeNodeFile) {
+  if (node is TreeNodeFile) {
     files.add(node);
   }
 
@@ -194,7 +198,7 @@ class DirectTreeNodeFile extends TreeNodeFile {
     }
 
     if (amount < 0) {
-      amount = stats.size;
+      return file.readAsBytesSync();
     }
 
     RandomAccessFile inst = file.openSync();

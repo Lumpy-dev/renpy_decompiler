@@ -215,8 +215,7 @@ class _FileViewerState extends State<FileViewer> {
         currentFile.version.postProcess(currentFile, controller.sink);
         controller.sink.close();
       } else if (currentFile is DirectTreeNodeFile) {
-        controller.sink
-            .add(currentFile.file.openSync().readSync(currentFile.size));
+        controller.sink.add(currentFile.file.readAsBytesSync());
         controller.sink.close();
       }
     }
