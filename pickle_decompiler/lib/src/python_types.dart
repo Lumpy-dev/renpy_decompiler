@@ -67,13 +67,6 @@ class PythonClassInstance {
                   : false)) {
                 this.state!['named_args'][slot.attributeName] = value;
                 continue;
-              } else {
-                for (var possibleType in slot.type!.possibleTypes) {
-                  if (possibleType is String) {
-                    print(
-                        'Comparing $possibleType with ${value.runtimeType.toString()}');
-                  }
-                }
               }
 
               throw Exception(
@@ -172,7 +165,6 @@ class PythonClassInstance {
         return null;
       }
 
-      print(invocation.memberName);
       return vars[invocation.memberName.toString()];
     }
 

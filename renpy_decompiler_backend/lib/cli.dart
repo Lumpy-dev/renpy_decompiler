@@ -112,7 +112,7 @@ class RpaCommand extends Command {
 
         try {
           int fileAmount =
-              await exportTree(out.tree, outputFolder, overwrite, filter);
+              await exportTree(out, outputFolder, overwrite, filter);
           if (fileAmount == 0) {
             print('No files were exported.');
           } else {

@@ -33,7 +33,7 @@ void loadGlobal(Unpickler unpickler) {
       .any((element) => element.klass == klass)) {
     klass.descriptor = unpickler.recognizedDescriptors
         .firstWhere((element) => element.klass == klass);
-  } else {
+  } else if (!unpickler.silent) {
     print('WARNING! Class $klass not recognized');
   }
 
@@ -149,12 +149,11 @@ void loadReduce(Unpickler unpickler) {
           (PythonClassInstance(func)..setState(args));
       return;
     }
-
-    print(
-        'WARNING! Calling $func with args $args (First element in args is ${(args?.isEmpty ?? true) ? 'null' : args.first.runtimeType}) but no implementation was defined');
+    if (!unpickler.silent) {
+      print(
+          'WARNING! Calling $func with args $args (First element in args is ${(args?.isEmpty ?? true) ? 'null' : args.first.runtimeType}) but no implementation was defined');
+    }
   }
-
-  //stack.last = func.call(args.first);
 }
 
 void loadNone(Unpickler unpickler) {

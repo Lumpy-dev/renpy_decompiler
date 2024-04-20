@@ -33,7 +33,7 @@ void main() {
           () async {
         var createdTree = await createTree(archive);
 
-        List<RPATreeNodeFile> files = listFiles(createdTree.tree, []);
+        List<RPATreeNodeFile> files = listFiles(createdTree, []);
 
         int attemptedFilesAmount = 0;
         int decompiledFilesAmount = 0;
@@ -85,11 +85,10 @@ void main() {
           data = zlib.decode(data);
 
           try {
-            List<dynamic> compiled = loads(
-              Uint8List.fromList(data),
-              recognizedDescriptors: descriptors,
-              swappers: swappers,
-            );
+            List<dynamic> compiled = loads(Uint8List.fromList(data),
+                recognizedDescriptors: descriptors,
+                swappers: swappers,
+                silent: false);
 
             parseFile(compiled);
           } on UnimplementedError {
