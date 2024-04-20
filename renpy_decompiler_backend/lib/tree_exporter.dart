@@ -5,7 +5,7 @@ import 'package:glob/glob.dart';
 import 'package:path/path.dart';
 import 'package:renpy_decompiler_backend/tree_creator.dart';
 
-Future<int> exportTree(RPATreeNode tree, Directory output,
+Future<int> exportTree(TreeNode tree, Directory output,
     [bool overwrite = true,
     Glob? filter,
     String currentPath = '',
@@ -22,7 +22,7 @@ Future<int> exportTree(RPATreeNode tree, Directory output,
     if (filter == null || filter.matches(directoryToExportTo.path)) {
       await directoryToExportTo.create(recursive: true);
     }
-    for (RPATreeNode child in tree.childNodes) {
+    for (TreeNode child in tree.childNodes) {
       currentFileAmount = await exportTree(
           child,
           output,

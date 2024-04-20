@@ -23,7 +23,7 @@ void main() {
         if (file is File) {
           print('Testing ${file.path}');
           List<int> decompressed =
-              (await findIndexAndVersion(file)).decompressedIndex;
+              (await findIndexAndVersion(file.openSync())).decompressedIndex;
 
           File tempObj = File('in.pickle');
           tempObj.writeAsBytesSync(decompressed);
@@ -61,7 +61,7 @@ void main() {
       test('test ${basename(file.path)}\'s load', () async {
         if (file is File) {
           print('Testing ${file.path}');
-          var indexAndVersion = await findIndexAndVersion(file);
+          var indexAndVersion = await findIndexAndVersion(file.openSync());
 
           File tempObj = File('in.pickle');
           tempObj.writeAsBytesSync(indexAndVersion.decompressedIndex);
