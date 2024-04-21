@@ -149,7 +149,11 @@ class RPATreeNodeFile extends TreeNodeFile implements RPATreeNode {
 
   RandomAccessFile archive;
 
-  RPATreeNodeFile(super.path, this.data, this.version, this.archive);
+  String fullPath;
+
+  RPATreeNodeFile(super.path, this.data, this.version, this.archive,
+      {String? fullPath})
+      : fullPath = fullPath ?? path;
 
   @override
   List<int> read(int amount) {
@@ -445,7 +449,8 @@ Future<RPATreeNodeDirectory> openArchive(
             (node) => node.path.split('/').last == part, orElse: () {
           if (i == parts.length - 1) {
             var newNode = RPATreeNodeFile(
-                part, curFile.value.first, decompressedIndex.version, file);
+                part, curFile.value.first, decompressedIndex.version, file,
+                fullPath: curFile.key);
             currentNode.childNodes.add(newNode);
             return newNode;
           }
