@@ -408,7 +408,8 @@ Future<
 }
 
 Future<RPATreeNodeDirectory> openArchive(
-    RandomAccessFile file, String currentPath) async {
+    RandomAccessFile file, String currentPath,
+    [bool lazyLoad = true]) async {
   var decompressedIndex = await findIndexAndVersion(file);
 
   var root = RPATreeNodeDirectory(
@@ -462,11 +463,16 @@ Future<RPATreeNodeDirectory> openArchive(
     return root.childNodes;
   });
 
+  if (!lazyLoad) {
+    await root.loadDirectory();
+  }
+
   return root;
 }
 
 Future<DirectTreeNodeDirectory> openDirectory(
-    Directory directory, String currentPath) async {
+    Directory directory, String currentPath,
+    [bool lazyLoad = true]) async {
   var root = DirectTreeNodeDirectory(currentPath, [], false, (root) async {
     for (var entity in directory.listSync()) {
       if (entity is File) {
@@ -491,16 +497,21 @@ Future<DirectTreeNodeDirectory> openDirectory(
     return root.childNodes;
   });
 
+  if (!lazyLoad) {
+    await root.loadDirectory();
+  }
+
   return root;
 }
 
-Future<TreeNode> createTree(FileSystemEntity file) async {
+Future<TreeNode> createTree(FileSystemEntity file,
+    [bool lazyLoad = true]) async {
   if (file is Link) {
     String link = file.resolveSymbolicLinksSync();
     if (File(link).existsSync()) {
-      return createTree(File(link));
+      return createTree(File(link), lazyLoad);
     } else if (Directory(link).existsSync()) {
-      return createTree(Directory(link));
+      return createTree(Directory(link), lazyLoad);
     } else {
       throw Exception('Invalid link: $link');
     }
@@ -508,14 +519,15 @@ Future<TreeNode> createTree(FileSystemEntity file) async {
 
   if (file is File) {
     if (await isRPAFile(file)) {
-      var archive = await openArchive(file.openSync(), basename(file.path));
+      var archive =
+          await openArchive(file.openSync(), basename(file.path), lazyLoad);
       return archive;
     }
 
     var direct = DirectTreeNodeFile(basename(file.path), file, file.statSync());
     return direct;
   } else if (file is Directory) {
-    var dir = await openDirectory(file, basename(file.path));
+    var dir = await openDirectory(file, basename(file.path), lazyLoad);
     return dir;
   } else {
     throw Exception('Invalid file type: $file (${file.runtimeType})');
