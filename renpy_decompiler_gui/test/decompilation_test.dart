@@ -31,7 +31,7 @@ void main() {
 
       test('${basename(archive.absolute.path)} .RPYC files decryption',
           () async {
-        var createdTree = await createTree(archive);
+        var createdTree = await createTree(archive, false);
 
         List<TreeNodeFile> files = listFiles(createdTree, []);
 
