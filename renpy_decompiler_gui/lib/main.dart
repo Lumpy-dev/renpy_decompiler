@@ -442,18 +442,29 @@ class _MainPageState extends State<MainPage> {
           ? Stack(
               children: [
                 Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      FilledButton(
-                          onPressed: openFile,
-                          child: const Text('Open archive/file')),
-                      FilledButton(
-                          onPressed: openDirectory,
-                          child: const Text('Open directory')),
-                    ],
-                  ),
-                ),
+                    child: Platform.isAndroid || Platform.isIOS
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              FilledButton(
+                                  onPressed: openFile,
+                                  child: const Text('Open archive/file')),
+                              FilledButton(
+                                  onPressed: openDirectory,
+                                  child: const Text('Open directory')),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              FilledButton(
+                                  onPressed: openFile,
+                                  child: const Text('Open archive/file')),
+                              FilledButton(
+                                  onPressed: openDirectory,
+                                  child: const Text('Open directory')),
+                            ],
+                          )),
                 Positioned.directional(
                     textDirection: TextDirection.ltr,
                     bottom: 8,
@@ -463,7 +474,7 @@ class _MainPageState extends State<MainPage> {
                           showAboutDialog(
                               context: context,
                               applicationLegalese:
-                                  'Available under the MIT license. Copyright © 2024, Lumpy and the project contributors.',
+                                  'Available under the MIT license.',
                               applicationVersion: packageInfo.version);
                         },
                         icon: const Icon(Icons.info),
