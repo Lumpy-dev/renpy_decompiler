@@ -31,16 +31,20 @@ class Unpickler {
   void Function(dynamic value)? add;
 
   List<PythonClassDescriptor> recognizedDescriptors;
-  List<PythonClassSwapper> recognizedSwappers;
 
-  Unpickler(
-      {required this.file,
-      this.encoding = 'ascii',
-      this.errors = 'strict',
-      List<dynamic>? buffers,
-      this.recognizedDescriptors = const [],
-      this.recognizedSwappers = const []})
-      : buffers = (buffers?.isEmpty ?? true) ? null : buffers!.iterator {
+  List<PythonClassSwapper> swappers;
+
+  bool silent;
+
+  Unpickler({
+    required this.file,
+    this.encoding = 'ascii',
+    this.errors = 'strict',
+    List<dynamic>? buffers,
+    this.recognizedDescriptors = const [],
+    this.swappers = const [],
+    this.silent = true,
+  }) : buffers = (buffers?.isEmpty ?? true) ? null : buffers!.iterator {
     RawFrame rawFrame = RawFrame(data: file);
     _fileReadline = rawFrame.readline;
     _fileRead = rawFrame.read;
@@ -93,19 +97,23 @@ class Unpickler {
   }
 }
 
-dynamic loads(Uint8List file,
-    {String encoding = 'ascii',
-    String errors = 'strict',
-    List<dynamic>? buffers,
-    List<PythonClassDescriptor> recognizedDescriptors = const [],
-    List<PythonClassSwapper> recognizedSwappers = const []}) {
+dynamic loads(
+  Uint8List file, {
+  String encoding = 'ascii',
+  String errors = 'strict',
+  List<dynamic>? buffers,
+  List<PythonClassDescriptor> recognizedDescriptors = const [],
+  List<PythonClassSwapper> swappers = const [],
+  bool silent = true,
+}) {
   return Unpickler(
           file: file,
           encoding: encoding,
           errors: errors,
           buffers: buffers,
-          recognizedDescriptors: recognizedDescriptors,
-          recognizedSwappers: recognizedSwappers)
+          recognizedDescriptors: recognizedDescriptors + internalDescriptors,
+          swappers: swappers + internalSwappers,
+          silent: silent)
       .load();
 }
 

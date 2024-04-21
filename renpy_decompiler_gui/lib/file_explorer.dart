@@ -17,17 +17,17 @@ import 'package:rxdart/rxdart.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class ArchiveExplorer extends StatefulWidget {
-  final RPATreeNode tree;
-  final File currentArchiveFile;
-  final void Function(List<RPATreeNodeFile>? selected) onNewSelection;
-  final void Function(RPATreeNodeFile node) onNodeSelected;
+  final TreeNode tree;
+  final FileSystemEntity currentPosition;
+  final void Function(List<TreeNodeFile>? selected) onNewSelection;
+  final void Function(TreeNodeFile node) onNodeSelected;
   final bool setSelected;
-  final List<RPATreeNodeFile>? selectedFiles;
+  final List<TreeNodeFile>? selectedFiles;
 
   const ArchiveExplorer(
       {super.key,
       required this.tree,
-      required this.currentArchiveFile,
+      required this.currentPosition,
       required this.onNewSelection,
       required this.onNodeSelected,
       this.setSelected = false,
@@ -38,7 +38,7 @@ class ArchiveExplorer extends StatefulWidget {
 }
 
 class _ArchiveExplorerState extends State<ArchiveExplorer> {
-  RPATreeNodeFile? currentNode;
+  TreeNodeFile? currentNode;
 
   @override
   Widget build(BuildContext context) {
@@ -91,12 +91,12 @@ class _ArchiveExplorerState extends State<ArchiveExplorer> {
 }
 
 class TreeExplorer extends StatefulWidget {
-  final void Function(RPATreeNodeFile node)? onNodeSelected;
-  final void Function(List<RPATreeNodeFile>? selected) onNewSelection;
-  final RPATreeNode tree;
+  final void Function(TreeNodeFile node)? onNodeSelected;
+  final void Function(List<TreeNodeFile>? selected) onNewSelection;
+  final TreeNode tree;
   final bool setSelected;
-  final List<RPATreeNodeFile>? selectedFiles;
-  final RPATreeNode? currentNode;
+  final List<TreeNodeFile>? selectedFiles;
+  final TreeNode? currentNode;
 
   const TreeExplorer(
       {super.key,
@@ -112,7 +112,7 @@ class TreeExplorer extends StatefulWidget {
 }
 
 class _TreeExplorerState extends State<TreeExplorer> {
-  List<RPATreeNodeFile>? selectedFiles;
+  List<TreeNodeFile>? selectedFiles;
 
   @override
   Widget build(BuildContext context) {
@@ -125,8 +125,8 @@ class _TreeExplorerState extends State<TreeExplorer> {
         child: SingleChildScrollView(child: _buildTree(widget.tree, context)));
   }
 
-  Widget _buildTree(RPATreeNode node, BuildContext context) {
-    if (node is RPATreeNodeFile) {
+  Widget _buildTree(TreeNode node, BuildContext context) {
+    if (node is TreeNodeFile) {
       return ListTile(
           key: Key(basename(node.path)),
           title: Text(basename(node.path)),
@@ -171,13 +171,18 @@ class _TreeExplorerState extends State<TreeExplorer> {
       return ExpansionTile(
         key: Key(basename(node.path)),
         title: Text(basename(node.path)),
+        onExpansionChanged: (expanded) async {
+          if (expanded && node is LoadableTreeNodeDirectory && !node.loaded) {
+            await node.loadDirectory();
+            setState(() {});
+          }
+        },
         children: _buildChildren(node.childNodes, context),
       );
     }
   }
 
-  List<Widget> _buildChildren(
-      List<RPATreeNode> children, BuildContext context) {
+  List<Widget> _buildChildren(List<TreeNode> children, BuildContext context) {
     if (children.isEmpty) {
       return [];
     }
@@ -187,7 +192,7 @@ class _TreeExplorerState extends State<TreeExplorer> {
 }
 
 class FileViewer extends StatefulWidget {
-  final RPATreeNodeFile? currentNode;
+  final TreeNodeFile? currentNode;
 
   const FileViewer({super.key, required this.currentNode});
 
@@ -204,10 +209,15 @@ class _FileViewerState extends State<FileViewer> {
     super.initState();
 
     if (widget.currentNode != null) {
-      RPATreeNodeFile currentFile = widget.currentNode as RPATreeNodeFile;
+      TreeNodeFile currentFile = widget.currentNode as TreeNodeFile;
 
-      currentFile.version.postProcess(currentFile, controller.sink);
-      controller.sink.close();
+      if (currentFile is RPATreeNodeFile) {
+        currentFile.version.postProcess(currentFile, controller.sink);
+        controller.sink.close();
+      } else if (currentFile is DirectTreeNodeFile) {
+        controller.sink.add(currentFile.file.readAsBytesSync());
+        controller.sink.close();
+      }
     }
   }
 
@@ -229,7 +239,19 @@ class _FileViewerState extends State<FileViewer> {
               }
 
               if (snapshot.connectionState == ConnectionState.done) {
-                return _buildFile(currentFileBytes);
+                try {
+                  return _buildFile(currentFileBytes);
+                } catch (e) {
+                  return Center(
+                    child: Column(
+                      children: [
+                        Text(
+                            'Error reading file: $e, the file was probably mislabeled by us or corrupted. You can try to export it and open it with different tools',
+                            style: Theme.of(context).textTheme.displayMedium),
+                      ],
+                    ),
+                  );
+                }
               } else {
                 return Container();
               }
@@ -255,8 +277,10 @@ class _FileViewerState extends State<FileViewer> {
 
   Widget _buildFile(List<int> bytes) {
     if (mimeType == null) {
-      mimeType = lookupMimeType(basename(widget.currentNode!.path),
-          headerBytes: bytes.sublist(0, defaultMagicNumbersMaxLength));
+      mimeType = bytes.length < defaultMagicNumbersMaxLength
+          ? null
+          : lookupMimeType(basename(widget.currentNode!.path),
+              headerBytes: bytes.sublist(0, defaultMagicNumbersMaxLength));
 
       switch (extension(widget.currentNode!.path)) {
         case '.rpy':
@@ -268,9 +292,13 @@ class _FileViewerState extends State<FileViewer> {
         case '.rpyc':
           mimeType = 'rpyc';
           break;
+        case '.svg':
+          mimeType = 'text/plain'; // the Image widget doesn't support SVG
+          break;
       }
 
-      if (listEquals(bytes.sublist(0, 10), utf8.encode('RENPY RPC2'))) {
+      if (bytes.length >= 10 &&
+          listEquals(bytes.sublist(0, 10), utf8.encode('RENPY RPC2'))) {
         mimeType = 'rpyc';
       }
     }
@@ -382,14 +410,26 @@ class _FileViewerState extends State<FileViewer> {
         return RPYCReader(bytes: bytes);
     }
 
-    return Builder(builder: (context) {
-      return Center(
-        child: Text(
-            'Unsupported file type${mimeType == null ? '' : ': $mimeType'} (${basename(widget.currentNode!.path)})',
-            style: Theme.of(context).textTheme.displayMedium,
-            textAlign: TextAlign.center),
-      );
-    });
+    String? fileContent;
+    try {
+      fileContent = utf8.decode(bytes);
+    } catch (_) {}
+
+    if (fileContent != null) {
+      return Builder(builder: (context) {
+        return SelectableText(fileContent!,
+            scrollPhysics: const AlwaysScrollableScrollPhysics());
+      });
+    } else {
+      return Builder(builder: (context) {
+        return Center(
+          child: Text(
+              'Unsupported file type${mimeType == null ? '' : ': $mimeType'} (${basename(widget.currentNode!.path)})',
+              style: Theme.of(context).textTheme.displayMedium,
+              textAlign: TextAlign.center),
+        );
+      });
+    }
   }
 
   @override

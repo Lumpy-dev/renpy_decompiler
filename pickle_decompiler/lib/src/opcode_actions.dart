@@ -33,6 +33,15 @@ void loadGlobal(Unpickler unpickler) {
       .any((element) => element.klass == klass)) {
     klass.descriptor = unpickler.recognizedDescriptors
         .firstWhere((element) => element.klass == klass);
+  } else if (!unpickler.silent) {
+    print('WARNING! Class $klass not recognized');
+  }
+
+  if (unpickler.swappers.any((element) => element.klass == klass)) {
+    unpickler.add!(unpickler.swappers
+        .firstWhere((element) => element.klass == klass)
+        .getReplacementOnInit([]));
+    return;
   }
 
   unpickler.add!(klass);
@@ -41,7 +50,7 @@ void loadGlobal(Unpickler unpickler) {
 void loadProto(Unpickler unpickler) {
   int proto = unpickler.read!(1).first;
   if (!(0 <= proto && proto <= highestProtocol)) {
-    throw Exception('unsupported pickle protocol: $proto');
+    throw UnsupportedError('unsupported pickle protocol: $proto');
   }
   unpickler.proto = proto;
 }
@@ -50,10 +59,15 @@ void newObj(Unpickler unpickler) {
   var args = unpickler.stack.removeLast();
   var cls = unpickler.stack.removeLast();
 
-  if (unpickler.recognizedSwappers.any((element) => element.klass == cls)) {
-    unpickler.add!(unpickler.recognizedSwappers
+  if (unpickler.swappers.any((element) => element.klass == cls)) {
+    unpickler.add!(unpickler.swappers
         .firstWhere((element) => element.klass == cls)
         .getReplacementOnInit(args));
+    return;
+  }
+
+  if (cls is Map || cls is List) {
+    unpickler.add!(cls);
     return;
   }
 
@@ -77,8 +91,7 @@ void loadFrame(Unpickler unpickler) {
 // What does persistent do ???
 void loadPersId(Unpickler unpickler) {
   try {
-    var pid = ascii.decode(unpickler.readline!()..removeLast());
-    print('pid is $pid');
+    //var pid = ascii.decode(unpickler.readline!()..removeLast());
     persistentLoad(0);
   } catch (e) {
     throw Exception('persistent IDs in protocol 0 must be ASCII strings');
@@ -91,27 +104,56 @@ void loadBinPersId(Unpickler unpickler) {
 }
 
 void loadReduce(Unpickler unpickler) {
-  var stack = unpickler.stack;
-  var args = stack.isEmpty ? null : stack.removeLast();
+  var args = unpickler.stack.isEmpty ? null : unpickler.stack.removeLast();
 
-  PythonClass? func = stack.lastOrNull;
-  if (func == PythonClass('defaultdict', module: 'collections') &&
-      args.first == PythonClass('list', module: '__builtin__')) {
-    stack.last = {};
+  PythonClass? func = unpickler.stack.lastOrNull;
+
+  if (func == PythonClass('list', module: '__builtin__')) {
+    unpickler.stack.last = args.first.toList();
     return;
   }
 
   if (func == PythonClass('set', module: '__builtin__') && args.first is List) {
-    stack.last = args.first.toSet();
+    unpickler.stack.last = args.first.toSet();
     return;
   }
 
-  if (func != null && func.descriptor != null) {
-    print(
-        'WARNING! Calling ${stack.last} with args $args (args first is ${args.first.runtimeType}) but no implementation is available was defined');
+  if (func == PythonClass('OrderedDict', module: 'collections') &&
+      (args.isEmpty || args.first is List)) {
+    if (args.isEmpty) {
+      unpickler.stack.last = <MapEntry<dynamic, dynamic>>[];
+      return;
+    }
+    // TODO: Check if this is the correct implementation
+    List<MapEntry<dynamic, dynamic>> orderedDict = [];
+
+    for (int i = 0; i < args.first.length; i++) {
+      orderedDict.add(MapEntry(args.first[i].first, args.first[i].last));
+    }
+
+    unpickler.stack.last = orderedDict;
+    return;
   }
 
-  //stack.last = func.call(args.first);
+  if (func != null) {
+    // Somewhere we don't add the descriptor to the class, TODO: find this place
+    if (func.descriptor == null &&
+        unpickler.recognizedDescriptors
+            .any((element) => element.klass == func)) {
+      func.descriptor = unpickler.recognizedDescriptors
+          .firstWhere((element) => element.klass == func);
+    }
+
+    if (func.descriptor != null) {
+      unpickler.stack.last = func.descriptor!.construct(args) ??
+          (PythonClassInstance(func)..setState(args));
+      return;
+    }
+    if (!unpickler.silent) {
+      print(
+          'WARNING! Calling $func with args $args (First element in args is ${(args?.isEmpty ?? true) ? 'null' : args.first.runtimeType}) but no implementation was defined');
+    }
+  }
 }
 
 void loadNone(Unpickler unpickler) {
@@ -144,12 +186,13 @@ void loadInt(Unpickler unpickler) {
 
 void loadBinInt(Unpickler unpickler) {
   var reader = Uint8List.fromList(unpickler.read!(4)).buffer.asByteData();
-  var val = reader.getUint32(0, Endian.little);
+  var val = reader.getInt32(0, Endian.little);
   unpickler.add!(val);
 }
 
 void loadBinInt1(Unpickler unpickler) {
-  unpickler.add!(unpickler.read!(1).first);
+  var val = unpickler.read!(1).first;
+  unpickler.add!(val);
 }
 
 void loadBinInt2(Unpickler unpickler) {
@@ -164,13 +207,16 @@ void loadLong(Unpickler unpickler) {
     val.removeLast();
   }
 
-  unpickler.add!(int.parse(ascii.decode(val)));
+  var finalVal = int.parse(ascii.decode(val));
+
+  unpickler.add!(finalVal);
 }
 
 void loadLong1(Unpickler unpickler) {
   var n = unpickler.read!(1).first;
   var data = unpickler.read!(n);
-  unpickler.add!(decodeLong(data));
+  var val = decodeLong(data);
+  unpickler.add!(val);
 }
 
 void loadLong4(Unpickler unpickler) {
@@ -181,7 +227,8 @@ void loadLong4(Unpickler unpickler) {
     throw Exception('LONG pickle has negative byte count');
   }
   var data = unpickler.read!(n);
-  unpickler.add!(decodeLong(data));
+  var val = decodeLong(data);
+  unpickler.add!(val);
 }
 
 void loadFloat(Unpickler unpickler) {
@@ -254,8 +301,8 @@ void loadBinUnicode(Unpickler unpickler) {
     throw Exception('BINUNICODE exceeds system\'s maximum size');
   }
 
-  var data = unpickler.read!(len);
-  unpickler.add!(Encoding.getByName('utf-8')!.decode(data));
+  var data = Encoding.getByName('utf-8')!.decode(unpickler.read!(len));
+  unpickler.add!(data);
 }
 
 void loadBinUnicode8(Unpickler unpickler) {
@@ -331,26 +378,27 @@ void loadShortBinUnicode(Unpickler unpickler) {
 
 void loadTuple(Unpickler unpickler) {
   var items = popMark(unpickler);
-  unpickler.add!(items);
+  unpickler.add!(List.unmodifiable(items));
 }
 
 void loadEmptyTuple(Unpickler unpickler) {
-  unpickler.add!([]);
+  unpickler.add!(List.unmodifiable([]));
 }
 
 void loadTuple1(Unpickler unpickler) {
-  unpickler.stack.last = [unpickler.stack.last];
+  unpickler.stack.last = List.unmodifiable([unpickler.stack.last]);
 }
 
 void loadTuple2(Unpickler unpickler) {
   var items = unpickler.stack.removeLast();
-  unpickler.stack.last = [unpickler.stack.last, items];
+  unpickler.stack.last = List.unmodifiable([unpickler.stack.last, items]);
 }
 
 void loadTuple3(Unpickler unpickler) {
   var items = unpickler.stack.removeLast();
   var items2 = unpickler.stack.removeLast();
-  unpickler.stack.last = [unpickler.stack.last, items2, items];
+  unpickler.stack.last =
+      List.unmodifiable([unpickler.stack.last, items2, items]);
 }
 
 void loadEmptyList(Unpickler unpickler) {
@@ -510,7 +558,7 @@ void loadMemoize(Unpickler unpickler) {
 void loadAppend(Unpickler unpickler) {
   var value = unpickler.stack.removeLast();
   if (unpickler.stack.last is PythonClassInstance) {
-    print('tried to add $value to ${unpickler.stack.last}');
+    throw UnsupportedError('tried to add $value to ${unpickler.stack.last}');
   }
   unpickler.stack.last.add(value);
 }
@@ -540,15 +588,42 @@ void loadSetItem(Unpickler unpickler) {
   var value = unpickler.stack.removeLast();
   var key = unpickler.stack.removeLast();
   var dict = unpickler.stack.last;
+
+  if (dict is! Map) {
+    // The object to set items to isn't a dict. Defaulting to {}
+    dict = {};
+  }
+
   dict[key] = value;
+
+  unpickler.stack.last = dict;
 }
 
 void loadSetItems(Unpickler unpickler) {
   var items = popMark(unpickler);
   var dict = unpickler.stack.last;
+
+  if (dict is! Map) {
+    if (dict is List) {
+      Map<dynamic, dynamic> newDict = {};
+      for (var i = 0; i < dict.length; i += 2) {
+        newDict[dict[i]] = dict[i + 1];
+      }
+      dict = newDict;
+    } else if (dict is PythonClassInstance) {
+      dict.state ??= {};
+      dict.state!['items'] = items;
+      return;
+    } else {
+      throw UnsupportedError('The object to set items to isn\'t a dict.');
+    }
+  }
+
   for (var i = 0; i < items.length; i += 2) {
     dict[items[i]] = items[i + 1];
   }
+
+  unpickler.stack.last = dict;
 }
 
 void loadAdditions(Unpickler unpickler) {
@@ -570,9 +645,29 @@ void loadBuild(Unpickler unpickler) {
   var inst = unpickler.stack.last;
   try {
     inst.setState(state);
+
+    unpickler.stack.last = inst;
   } catch (e) {
     if (inst is List) {
       inst = state;
+      return;
+    }
+
+    if (inst is Map && state is List && state.length % 2 == 0) {
+      inst = {};
+
+      for (var i = 0; i < state.length; i += 2) {
+        inst[state[i]] = state[i + 1];
+      }
+
+      unpickler.stack.last = inst;
+
+      return;
+    }
+
+    if (inst is Map && state is Map) {
+      unpickler.stack.last = state;
+
       return;
     }
 
@@ -618,7 +713,7 @@ Map<int, Loader?> opcodeMap = {
   BINUNICODE: loadBinUnicode,
   APPEND: loadAppend,
   BUILD: loadBuild,
-  GLOBAL: loadGlobal, // TO ADD
+  GLOBAL: loadGlobal,
   DICT: loadDict,
   EMPTY_DICT: loadEmptyDictionary,
   APPENDS: loadAppends,

@@ -3,10 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pickle_decompiler/pickle_decompiler.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/ast.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/python.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/revertable.dart';
-import 'package:renpy_decompiler_backend/bridges/renpy/sl2/slast.dart';
 import 'package:renpy_decompiler_backend/rpyc_parser.dart';
 
 class RPYCReader extends StatefulWidget {
@@ -59,11 +55,11 @@ class _RPYCReaderState extends State<RPYCReader> {
     fileBytes = zlib.decode(fileBytes);
 
     try {
-      var out = Unpickler(
-              file: Uint8List.fromList(fileBytes),
-              recognizedDescriptors: [...astDescriptors, ...slastDescriptors],
-              recognizedSwappers: [...revertableSwappers, ...pythonSwappers])
-          .load();
+      var out = loads(
+        Uint8List.fromList(fileBytes),
+        recognizedDescriptors: descriptors,
+        swappers: swappers,
+      );
       parsedOut = parseFile(out);
     } catch (e) {
       if (e is UnimplementedError) {
@@ -83,10 +79,10 @@ class _RPYCReaderState extends State<RPYCReader> {
             title: const Text('Decompiled file'),
             content: const Text('This file was decompiled.\n\n'
                 'RPYC files are compiled Ren\'Py script files who tells the engine what to do.\n'
-                'As this is not the original script file, it may defer from what the artist originally wrote.\n'
+                'As this is not the original script file, it may defer from what the artist(s) originally wrote.\n'
                 'If you see any obvious issues with this code please report this.\n'
                 'This decompiler was made possible with the UnRPYC Python project which was then ported to Dart.\n'
-                'We have not yet achieved feature parity, the only missing feature are: screens and testcases.\n\n' // TODO: Remove this note once we have feature parity
+                'We have achieved feature parity, however outputs may be different because of errors during the portage of UnRPYC or in UnRPYC itself.\n\n'
                 'If you find many empty lines, those are usually comments that were removed by the compiler.'),
             actions: [
               TextButton(

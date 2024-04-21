@@ -11,6 +11,19 @@ class RevertableList extends PythonClassSwapper {
       PythonClass('RevertableList', module: 'renpy.revertable');
 }
 
+class OrderedDict extends PythonClassSwapper {
+  @override
+  getReplacementOnInit(List args) {
+    return PythonClass('defaultdict', module: 'collections');
+  }
+
+  final klassName = PythonClass('OrderedDict', module: 'collections');
+
+  @override
+  PythonClass get klass => klassName;
+}
+
 List<PythonClassSwapper> revertableSwappers = [
+  OrderedDict(),
   RevertableList(),
 ];

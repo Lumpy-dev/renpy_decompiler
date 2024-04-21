@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
 import 'package:renpy_decompiler_backend/tree_creator.dart';
 import 'package:renpy_decompiler_backend/tree_exporter.dart';
 import 'package:renpy_decompiler_gui/file_explorer.dart';
@@ -12,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 bool? isMPVInstalled;
+late final PackageInfo packageInfo;
 
 void main(List<String> args) async {
   await loadFlutter();
@@ -20,8 +23,11 @@ void main(List<String> args) async {
 Future<void> loadFlutter() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  isMPVInstalled =
-      Platform.isLinux ? Process.runSync('which', ['mpv']).exitCode == 0 : null;
+  isMPVInstalled = Platform.isLinux
+      ? Process.runSync('mpv', ['--version']).exitCode != 127
+      : null;
+
+  packageInfo = await PackageInfo.fromPlatform();
 
   runApp(const App());
 }
@@ -57,16 +63,15 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  RPATreeNode? tree;
-  PlatformFile? currentFile;
+  TreeNode? tree;
+  String? currentFilePath;
   RPAVersion? version;
-  List<RPATreeNodeFile>? selectedFiles;
-  int? totalFileAmount;
-  RPATreeNodeFile? currentFileNode;
+  List<TreeNodeFile>? selectedFiles;
+  TreeNodeFile? currentFileNode;
 
   StreamController<({int amount, int max})>? unarchivalStreamController;
 
-  Future<void> exportFiles(List<RPATreeNode> files, Directory directory) async {
+  Future<void> exportFiles(List<TreeNode> files, Directory directory) async {
     setState(() {
       unarchivalStreamController = StreamController();
     });
@@ -96,34 +101,73 @@ class _MainPageState extends State<MainPage> {
     ));
   }
 
-  void openArchive() {
+  void openFile() {
     FilePicker.platform
         .pickFiles(
             allowMultiple: false,
             allowCompression: false,
-            dialogTitle: 'Select an RPA file',
-            type: Platform.isAndroid || Platform.isIOS
-                ? FileType.any
-                : FileType.custom,
-            allowedExtensions:
-                Platform.isAndroid || Platform.isIOS ? null : ['rpa', 'rpi'],
+            dialogTitle: 'Select a file',
             lockParentWindow: true)
         .then((value) async {
       if (value != null) {
         setState(() {
           unarchivalStreamController = StreamController();
           tree = null;
-          currentFile = value.files.single;
+          currentFilePath = value.files.single.path;
           version = null;
-          totalFileAmount = null;
 
-          var futureTree = createTree(File(currentFile!.path!));
+          var futureTree = createTree(File(currentFilePath!));
           futureTree.then((value) {
             unarchivalStreamController = null;
             setState(() {
-              tree = value.tree;
-              version = value.version;
-              totalFileAmount = value.fileAmount;
+              tree = value;
+              if (tree is RPATreeNode) {
+                version = (tree as RPATreeNode).version;
+              }
+            });
+          }, onError: (err) {
+            if (err is UnsupportedRPAVersionException) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(err.message),
+              ));
+            } else {
+              if (kDebugMode) {
+                throw err;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content:
+                    Text('Couldn\'t open the file, please report this: $err'),
+              ));
+            }
+            setState(() {
+              currentFilePath = null;
+            });
+          });
+        });
+      }
+    });
+  }
+
+  void openDirectory() {
+    FilePicker.platform
+        .getDirectoryPath(
+            dialogTitle: 'Select a folder to open', lockParentWindow: true)
+        .then((value) async {
+      if (value != null) {
+        setState(() {
+          unarchivalStreamController = StreamController();
+          tree = null;
+          currentFilePath = value;
+          version = null;
+
+          var futureTree = createTree(Directory(currentFilePath!));
+          futureTree.then((value) {
+            unarchivalStreamController = null;
+            setState(() {
+              tree = value;
+              if (tree is RPATreeNode) {
+                version = (tree as RPATreeNode).version;
+              }
             });
           }, onError: (err) {
             if (err is UnsupportedRPAVersionException) {
@@ -136,11 +180,11 @@ class _MainPageState extends State<MainPage> {
               }
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(
-                    'Couldn\'t open the archive, please report this: $err'),
+                    'Couldn\'t open the directory, please report this: $err'),
               ));
             }
             setState(() {
-              currentFile = null;
+              currentFilePath = null;
             });
           });
         });
@@ -202,7 +246,9 @@ class _MainPageState extends State<MainPage> {
                     .getDirectoryPath(
                         dialogTitle: 'Pick folder to save the archive to',
                         lockParentWindow: true,
-                        initialDirectory: File(currentFile!.path!).parent.path)
+                        initialDirectory: currentFileNode is TreeNodeFile
+                            ? File(currentFilePath!).parent.path
+                            : currentFilePath)
                     .then((value) async {
                   if (value != null) {
                     exportFiles(tree!.childNodes, Directory(value));
@@ -216,7 +262,7 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  int? countSelectedFiles([RPATreeNode? current, int amount = 0]) {
+  int? countSelectedFiles([TreeNode? current, int amount = 0]) {
     if (selectedFiles == null) {
       return null;
     }
@@ -227,7 +273,7 @@ class _MainPageState extends State<MainPage> {
       }
     }
 
-    if (current is RPATreeNodeFile) {
+    if (current is TreeNodeFile) {
       return amount + 1;
     }
 
@@ -241,9 +287,9 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     Widget openButton = IconButton(
-        tooltip: 'Open', onPressed: openArchive, icon: const Icon(Icons.add));
+        tooltip: 'Open', onPressed: openFile, icon: const Icon(Icons.add));
 
-    List<PopupMenuItem<List<RPATreeNode>>> possibilities = [
+    List<PopupMenuItem<List<TreeNode>>> possibilities = [
       PopupMenuItem(
         value: tree?.childNodes ?? [],
         child: const Text('Unarchive all'),
@@ -272,7 +318,7 @@ class _MainPageState extends State<MainPage> {
       tooltip: 'Unarchive',
     );
 
-    Widget unarchiveChooseButton = PopupMenuButton<List<RPATreeNode>>(
+    Widget unarchiveChooseButton = PopupMenuButton<List<TreeNode>>(
         itemBuilder: (context) {
           return possibilities;
         },
@@ -283,7 +329,9 @@ class _MainPageState extends State<MainPage> {
               .getDirectoryPath(
                   dialogTitle: 'Pick folder to save the files to',
                   lockParentWindow: true,
-                  initialDirectory: File(currentFile!.path!).parent.path)
+                  initialDirectory: currentFileNode is TreeNodeFile
+                      ? File(currentFilePath!).parent.path
+                      : currentFilePath)
               .then((value) async {
             if (value != null) {
               if (selection == tree!.childNodes) {
@@ -302,9 +350,10 @@ class _MainPageState extends State<MainPage> {
             context: context,
             builder: (BuildContext context) {
               return AlertDialog(
-                title: const Text('Archive information'),
-                content: Text(
-                    'Name: ${currentFile!.name}\nSize: ${(currentFile!.size / 1000000).toStringAsFixed(2)} MB\nVersion: ${version!.version}'),
+                title: const Text('Information'),
+                content: Text('Name: ${currentFileNode!.name}\n'
+                    'Size: ${(currentFileNode!.size / 1000000).toStringAsFixed(2)} MB\n'
+                    'Version: ${version?.version ?? 'Not an archive'}'),
                 actions: [
                   TextButton(
                       onPressed: () {
@@ -322,7 +371,7 @@ class _MainPageState extends State<MainPage> {
     int? selectedFileAmount = countSelectedFiles();
 
     return Scaffold(
-      appBar: currentFile == null
+      appBar: currentFilePath == null
           ? null
           : AppBar(
               backgroundColor: selectedFiles == null
@@ -330,31 +379,26 @@ class _MainPageState extends State<MainPage> {
                   : Theme.of(context).colorScheme.surfaceVariant,
               leading: IconButton(
                   onPressed: () {
-                    if (selectedFiles != null) {
-                      setState(() {
+                    setState(() {
+                      if (selectedFiles != null) {
                         selectedFiles = null;
-                      });
-                    } else {
-                      setState(() {
-                        currentFile = null;
+                      } else {
+                        currentFilePath = null;
                         tree = null;
                         version = null;
-                        totalFileAmount = null;
                         currentFileNode = null;
-                      });
-                    }
+                      }
+                    });
                   },
                   icon: const Icon(Icons.close),
                   tooltip: selectedFiles == null
                       ? 'Close the archive'
                       : 'Deselect all files'),
               title: Text(tree == null
-                  ? '${currentFile!.name} is being opened...'
+                  ? 'Location is being opened...'
                   : (selectedFiles != null
-                      ? '$selectedFileAmount file${selectedFileAmount == 1 ? '' : 's'} selected'
-                      : (Platform.isAndroid || Platform.isIOS
-                          ? currentFile!.name
-                          : '${currentFile!.name}, ${(currentFile!.size / 1000000).toStringAsFixed(2)} MB, ${version!.version}'))),
+                      ? '$selectedFileAmount location${selectedFileAmount == 1 ? '' : 's'} selected'
+                      : '${p.basename(tree!.path)}${version != null ? ', ${version!.version}' : ''}')),
               actions: tree == null
                   ? []
                   : [
@@ -363,7 +407,8 @@ class _MainPageState extends State<MainPage> {
                         child: (!Platform.isAndroid &&
                                     !Platform.isIOS &&
                                     !kDebugMode) ||
-                                selectedFiles == null
+                                selectedFiles == null ||
+                                currentFileNode == null
                             ? Container()
                             : infoButton,
                       ),
@@ -397,10 +442,29 @@ class _MainPageState extends State<MainPage> {
           ? Stack(
               children: [
                 Center(
-                  child: FilledButton(
-                      onPressed: openArchive,
-                      child: const Text('Open archive')),
-                ),
+                    child: Platform.isAndroid || Platform.isIOS
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              FilledButton(
+                                  onPressed: openFile,
+                                  child: const Text('Open archive/file')),
+                              FilledButton(
+                                  onPressed: openDirectory,
+                                  child: const Text('Open directory')),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              FilledButton(
+                                  onPressed: openFile,
+                                  child: const Text('Open archive/file')),
+                              FilledButton(
+                                  onPressed: openDirectory,
+                                  child: const Text('Open directory')),
+                            ],
+                          )),
                 Positioned.directional(
                     textDirection: TextDirection.ltr,
                     bottom: 8,
@@ -410,8 +474,8 @@ class _MainPageState extends State<MainPage> {
                           showAboutDialog(
                               context: context,
                               applicationLegalese:
-                                  'Available under the MIT license. Copyright © 2024, Lumpy and the project contributors.',
-                              applicationVersion: '1.0.0');
+                                  'Available under the MIT license.',
+                              applicationVersion: packageInfo.version);
                         },
                         icon: const Icon(Icons.info),
                         tooltip: 'About'))
@@ -419,12 +483,16 @@ class _MainPageState extends State<MainPage> {
             )
           : ArchiveExplorer(
               tree: tree!,
-              currentArchiveFile: File(currentFile!.path!),
+              currentPosition: currentFileNode is TreeNodeFile
+                  ? File(currentFilePath!)
+                  : Directory(currentFilePath!),
               onNewSelection: (selected) => setState(() {
                 selectedFiles = selected;
               }),
               onNodeSelected: (node) {
-                currentFileNode = node;
+                setState(() {
+                  currentFileNode = node;
+                });
               },
               setSelected: setSelected,
               selectedFiles: selectedFiles,
